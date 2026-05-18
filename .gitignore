@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# Conda / installer leftovers
+Miniconda3-*.exe
+*.exe
+
+# Workflow outputs (regenerable)
+md_runs/
+analysis/
+reports/
+references.json
+md_out.traj
+md_out.log
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
