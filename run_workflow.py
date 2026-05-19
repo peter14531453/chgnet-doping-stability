@@ -1,32 +1,36 @@
 """
 Orchestrator for the full doping-stability workflow.
 
-  Phase 1: chemical potentials (setup_references)
-  Phase 2: enumerate symmetrically distinct host sites (enumerate_and_relax)
-  Phase 3: relax pristine + every candidate, compute E_f
-  Phase 4: NVT MD on each candidate (or just the top-N, configurable)
-  Phase 5: trajectory analysis
-  Phase 6: stability report per test, plus a summary table
+Supports:
+  - Multiple target layers in one run (e.g. target_elements=["Co","Na"])
+    so the program automatically tests every layer and ranks site preference.
+  - Charge compensation: for aliovalent dopants with negative charge mismatch
+    (dopant brings less positive charge than the atom it replaces), Na atoms
+    are removed from the supercell to restore charge neutrality. Positive
+    mismatch cases run uncompensated with a warning.
+  - Per-phase caching and MD mid-run resume (see checkpoint files).
+  - Bottom-pinned tqdm progress bar per test.
 
-Every phase writes a checkpoint. Reruns skip any phase whose output already
-exists, so a paused workflow resumes where it stopped. MD additionally
-supports mid-run resume from the partial trajectory.
+Configure the WorkflowConfig block at the bottom and run:
 
-Each test gets a bottom-pinned progress bar that tracks doped_relax + MD +
-analysis in real time.
+    python run_workflow.py
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from chgnet.model.model import CHGNet
 
+from charge_utils import (
+    charge_mismatch as compute_charge_mismatch,
+    describe_compensation,
+)
 from setup_references import get_or_compute_references
 from enumerate_and_relax import (
     enumerate_sites,
     formation_energy,
-    relax_doped,
+    relax_doped_compensated,
     relax_pristine,
 )
 from run_md import MDRunSpec, run_md
@@ -39,12 +43,12 @@ from progress import info, loop_progress_bar, test_progress_bar
 class WorkflowConfig:
     primitive_cell_file: str = "primitive_cells/NaCoO2.cif"
     host_formula: str = "NaCoO2"
-    target_element: str = "Co"
+    target_elements: list = field(default_factory=lambda: ["Co"])
     dopant: str = "Al"
     supercell_size: int = 2
     chgnet_model: str = "r2scan"
     run_md: bool = True
-    md_top_n: int = 1
+    md_top_n: int = 1           # MD runs per target element
     md_spec: MDRunSpec = None
     reports_dir: str = "reports"
     relaxed_dir: str = "relaxed_structures"
@@ -52,6 +56,10 @@ class WorkflowConfig:
     references_file: str = "references.json"
     force_recompute: bool = False
     coordination_cutoff_A: float = 2.5
+    charge_compensate: bool = True
+    compensation_ref: str = "Na"
+    dopant_oxidation_state: int | None = None
+    target_oxidation_states: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if self.md_spec is None:
@@ -66,80 +74,151 @@ def header(title):
     info(bar)
 
 
+def _cross_site_summary(reports):
+    header("SITE PREFERENCE SUMMARY")
+    info(f"  {'Test':<45} {'Target':>6} {'E_f (eV)':>10} {'Comp':>5} {'Verdict'}")
+    info("  " + "-" * 78)
+    for r in sorted(reports, key=lambda x: x.formation_energy_eV):
+        comp = "Y" if r.compensation_applied else "N"
+        info(
+            f"  {r.test_name:<45} {r.target_site_element:>6} "
+            f"{r.formation_energy_eV:>+10.4f} {comp:>5}  {r.verdict}"
+        )
+    info()
+
+    best = min(reports, key=lambda x: x.formation_energy_eV)
+    info(f"  Lowest E_f: {best.target_site_element} site ({best.formation_energy_eV:+.4f} eV)")
+
+    target_bests = {}
+    for r in reports:
+        t = r.target_site_element
+        if t not in target_bests or r.formation_energy_eV < target_bests[t].formation_energy_eV:
+            target_bests[t] = r
+
+    if len(target_bests) > 1:
+        ordered = sorted(target_bests.values(), key=lambda r: r.formation_energy_eV)
+        info()
+        info("  Per-layer best:")
+        for r in ordered:
+            info(f"    {r.target_site_element} site: E_f = {r.formation_energy_eV:+.4f} eV  "
+                 f"({r.charge_mismatch:+d} charge mismatch)  →  {r.verdict}")
+        info()
+        winner = ordered[0]
+        info(f"  >>> Dopant prefers the {winner.target_site_element} layer "
+             f"(delta E_f = {ordered[1].formation_energy_eV - ordered[0].formation_energy_eV:+.4f} eV) <<<")
+
+
 def run(config):
     Path(config.reports_dir).mkdir(parents=True, exist_ok=True)
 
     header("Loading CHGNet")
     chgnet = CHGNet.load(model_name=config.chgnet_model)
 
-    header(f"Phase 1: chemical potentials for {config.dopant}, {config.target_element}")
+    all_ref_elements = sorted({config.dopant, config.compensation_ref} | set(config.target_elements))
+    header(f"Phase 1: chemical potentials — {', '.join(all_ref_elements)}")
     mus = get_or_compute_references(
-        [config.dopant, config.target_element],
-        chgnet=chgnet,
-        path=config.references_file,
-        force=config.force_recompute,
+        all_ref_elements, chgnet=chgnet,
+        path=config.references_file, force=config.force_recompute,
     )
 
-    header("Phase 2-3: pristine supercell + site enumeration")
+    header("Phase 2: pristine supercell")
     primitive, supercell, pristine_final, pristine_energy, pristine_sg = relax_pristine(
-        config.primitive_cell_file,
-        config.supercell_size,
-        chgnet,
-        output_dir=config.relaxed_dir,
-        force=config.force_recompute,
+        config.primitive_cell_file, config.supercell_size, chgnet,
+        output_dir=config.relaxed_dir, force=config.force_recompute,
     )
-    candidates = enumerate_sites(pristine_final, config.target_element)
-    info(f"Found {len(candidates)} symmetrically distinct {config.target_element} site(s):")
-    for c in candidates:
-        info(f"  site {c.site_index}  multiplicity={c.multiplicity}  frac={c.fractional_coords}")
 
-    header("Phase 3: relax each doped configuration + formation energies")
-    configurations = []
-    n_candidates = len(candidates)
-    with loop_progress_bar(n_candidates, "Phase 3 doped relaxations") as bar:
-        for i, candidate in enumerate(candidates):
-            label = f"site{candidate.site_index}"
-            relaxed = relax_doped(
-                pristine_final, candidate.site_index, config.dopant, config.target_element,
-                chgnet, output_dir=config.relaxed_dir, label=label,
-                force=config.force_recompute,
-            )
-            e_f = formation_energy(
-                relaxed.final_energy_eV,
-                pristine_energy,
-                mu_removed=mus[config.target_element],
-                mu_dopant=mus[config.dopant],
-            )
-            info(f"  [{label}] E_f = {e_f:+.4f} eV")
-            bar.update(1)
-            info(
-                f"  >>> Phase 3 progress: {i+1}/{n_candidates} "
-                f"({(i+1)/n_candidates*100:.1f}%) <<<"
-            )
-            configurations.append((candidate, relaxed, e_f))
+    all_configurations = []
 
-    configurations.sort(key=lambda x: x[2])
+    for target_element in config.target_elements:
+        target_ox = config.target_oxidation_states.get(target_element)
+        mismatch = compute_charge_mismatch(
+            config.dopant, target_element,
+            dopant_ox=config.dopant_oxidation_state,
+            target_ox=target_ox,
+        )
+        comp_desc = describe_compensation(mismatch, config.compensation_ref)
+
+        header(
+            f"Phase 3: {config.dopant} → {target_element} site  "
+            f"(mismatch {mismatch:+d})  {comp_desc}"
+        )
+
+        candidates = enumerate_sites(pristine_final, target_element)
+        info(f"  {len(candidates)} symmetrically distinct {target_element} site(s)")
+
+        with loop_progress_bar(len(candidates), f"Relaxing {config.dopant}@{target_element}") as bar:
+            for i, candidate in enumerate(candidates):
+                label = f"{target_element}_site{candidate.site_index}"
+                relaxed, comp_applied, comp_warnings = relax_doped_compensated(
+                    pristine_final, candidate.site_index, config.dopant, target_element,
+                    chgnet, mismatch=mismatch,
+                    compensation_ref=config.compensation_ref,
+                    output_dir=config.relaxed_dir, label=label,
+                    force=config.force_recompute,
+                )
+
+                mu_removed_list = [mus[target_element]]
+                if comp_applied:
+                    mu_removed_list += [mus[config.compensation_ref]] * abs(mismatch)
+
+                e_f = formation_energy(
+                    relaxed.final_energy_eV, pristine_energy,
+                    mu_removed_list, mus[config.dopant],
+                )
+                info(f"  [{label}] E_f = {e_f:+.4f} eV  comp={comp_applied}")
+                bar.update(1)
+                info(f"  >>> Phase 3 progress: {i+1}/{len(candidates)} ({(i+1)/len(candidates)*100:.1f}%) [{target_element}] <<<")
+
+                all_configurations.append({
+                    "candidate": candidate,
+                    "relaxed": relaxed,
+                    "e_f": e_f,
+                    "target_element": target_element,
+                    "mismatch": mismatch,
+                    "comp_applied": comp_applied,
+                    "comp_warnings": comp_warnings,
+                    "comp_desc": comp_desc,
+                    "candidate_rank_within_target": None,
+                })
+
+    all_configurations.sort(key=lambda x: x["e_f"])
+
+    for target_element in config.target_elements:
+        target_cfgs = [c for c in all_configurations if c["target_element"] == target_element]
+        for rank, cfg in enumerate(target_cfgs):
+            cfg["candidate_rank_within_target"] = rank
 
     md_total_steps = config.md_spec.equilibration_steps + config.md_spec.production_steps
-
     reports = []
-    for rank, (candidate, relaxed, e_f) in enumerate(configurations):
-        test_name = f"{config.dopant}@{config.target_element}_site{candidate.site_index}_rank{rank+1}"
-        do_md = config.run_md and rank < config.md_top_n
-        header(f"Test {rank+1}/{len(configurations)}: {test_name}  (run_md={do_md})")
+
+    for cfg in all_configurations:
+        candidate = cfg["candidate"]
+        relaxed = cfg["relaxed"]
+        e_f = cfg["e_f"]
+        target_element = cfg["target_element"]
+        mismatch = cfg["mismatch"]
+        comp_applied = cfg["comp_applied"]
+        comp_warnings = cfg["comp_warnings"]
+        rank_within_target = cfg["candidate_rank_within_target"]
+
+        do_md = config.run_md and rank_within_target < config.md_top_n
+        test_name = (
+            f"{config.dopant}@{target_element}_site{candidate.site_index}"
+        )
+        header(f"Test: {test_name}  (run_md={do_md})")
 
         report = StabilityReport(
             test_name=test_name,
             host_formula=config.host_formula,
             dopant=config.dopant,
-            target_site_element=config.target_element,
+            target_site_element=target_element,
             site_index=candidate.site_index,
             supercell_size=config.supercell_size,
             formation_energy_eV=e_f,
             pristine_energy_eV=pristine_energy,
             doped_energy_eV=relaxed.final_energy_eV,
             mu_dopant_eV=mus[config.dopant],
-            mu_removed_eV=mus[config.target_element],
+            mu_removed_eV=mus[target_element],
             relaxed_space_group=relaxed.relaxed_space_group,
             relaxed_coordination=relaxed.coordination_number,
             relaxed_mean_nn_distance_A=(
@@ -147,10 +226,15 @@ def run(config):
                 if relaxed.nn_distances_A else None
             ),
             relaxed_nn_distances_A=relaxed.nn_distances_A,
+            charge_mismatch=mismatch,
+            compensation_applied=comp_applied,
+            compensation_description=cfg["comp_desc"],
         )
         report.notes.append(
-            f"Symmetric multiplicity of this site in the pristine supercell: {candidate.multiplicity}"
+            f"Symmetric multiplicity: {candidate.multiplicity}"
         )
+        for w in comp_warnings:
+            report.notes.append(f"WARNING: {w}")
 
         with test_progress_bar(test_name, md_total_steps) as progress:
             progress.phase("doped_relax")
@@ -192,30 +276,24 @@ def run(config):
 
         reports.append(report)
 
-    header("Summary across all candidates")
+    _cross_site_summary(reports)
+
     summary_path = Path(config.reports_dir) / "summary.csv"
     write_summary_table(reports, summary_path)
     info(f"Wrote summary -> {summary_path}")
-    info("\nRanked by E_f (lowest = most favorable):")
-    info(f"  {'site':>6}  {'E_f (eV)':>10}  {'verdict'}")
-    for r in reports:
-        info(f"  {r.site_index:>6}  {r.formation_energy_eV:>+10.4f}  {r.verdict}")
     return reports
 
 
 if __name__ == "__main__":
-    # NOTE: Ca2+ substituting Co3+ is aliovalent (charge mismatch -1 per dopant).
-    # CHGNet is charge-neutral so charge compensation is not modelled explicitly.
-    # Results are approximate but valid for structural site stability assessment.
     config = WorkflowConfig(
         primitive_cell_file="primitive_cells/NaCoO2.cif",
         host_formula="NaCoO2",
-        target_element="Co",
-        dopant="Ca",
+        target_elements=["Co", "Na"],   # test both layers
+        dopant="Mn",
         supercell_size=2,
         chgnet_model="r2scan",
         run_md=True,
-        md_top_n=1,
+        md_top_n=1,                     # MD on best site per layer
         md_spec=MDRunSpec(
             temperature_C=250.0,
             timestep_fs=2.0,
@@ -224,6 +302,11 @@ if __name__ == "__main__":
             loginterval=10,
         ),
         force_recompute=False,
-        coordination_cutoff_A=2.7,  # Ca-O bonds ~2.4 A, wider than Al-O ~1.91 A
+        coordination_cutoff_A=2.5,
+        charge_compensate=True,
+        compensation_ref="Na",
+        dopant_oxidation_state=3,       # Mn3+ most common in layered oxides
+        # Mn3+ @ Co3+: mismatch = 0 (isovalent, no compensation needed)
+        # Mn3+ @ Na+:  mismatch = +2 (surplus — runs uncompensated, E_f approximate)
     )
     run(config)
