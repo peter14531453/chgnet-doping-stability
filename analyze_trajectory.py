@@ -70,7 +70,7 @@ def late_time_slope(time_ps, msd, fraction=0.5):
     return float(slope)
 
 
-def coordination_history(frames, atom_index, cutoff_A=3.2):
+def coordination_history(frames, atom_index, cutoff_A=2.5):
     coords = []
     for atoms in frames:
         positions = atoms.get_positions()
@@ -89,7 +89,7 @@ def coordination_history(frames, atom_index, cutoff_A=3.2):
     return coords
 
 
-def mean_nn_distance(frames, atom_index, cutoff_A=3.2):
+def mean_nn_distance(frames, atom_index, cutoff_A=2.5):
     distances_all = []
     for atoms in frames:
         positions = atoms.get_positions()
@@ -155,7 +155,7 @@ def save_rdf(frames, atom_index, output_path, r_max=6.0, n_bins=120):
     return centers, g
 
 
-def analyze(md_result, dopant_symbol, cutoff_A=3.2, output_dir="analysis", force=False):
+def analyze(md_result, dopant_symbol, cutoff_A=2.5, output_dir="analysis", force=False):
     traj_path = md_result["trajectory_path"]
     eq = md_result.get("equilibration_frames", 0)
     timestep_fs = md_result["timestep_fs"]

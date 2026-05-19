@@ -51,6 +51,7 @@ class WorkflowConfig:
     analysis_dir: str = "analysis"
     references_file: str = "references.json"
     force_recompute: bool = False
+    coordination_cutoff_A: float = 2.5
 
     def __post_init__(self):
         if self.md_spec is None:
@@ -161,6 +162,7 @@ def run(config):
                 )
                 analysis = analyze(
                     md_result, dopant_symbol=config.dopant,
+                    cutoff_A=config.coordination_cutoff_A,
                     output_dir=config.analysis_dir,
                     force=config.force_recompute,
                 )
@@ -202,11 +204,14 @@ def run(config):
 
 
 if __name__ == "__main__":
+    # NOTE: Ca2+ substituting Co3+ is aliovalent (charge mismatch -1 per dopant).
+    # CHGNet is charge-neutral so charge compensation is not modelled explicitly.
+    # Results are approximate but valid for structural site stability assessment.
     config = WorkflowConfig(
         primitive_cell_file="primitive_cells/NaCoO2.cif",
         host_formula="NaCoO2",
         target_element="Co",
-        dopant="Al",
+        dopant="Ca",
         supercell_size=2,
         chgnet_model="r2scan",
         run_md=True,
@@ -219,5 +224,6 @@ if __name__ == "__main__":
             loginterval=10,
         ),
         force_recompute=False,
+        coordination_cutoff_A=2.7,  # Ca-O bonds ~2.4 A, wider than Al-O ~1.91 A
     )
     run(config)
