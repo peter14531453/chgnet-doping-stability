@@ -99,7 +99,7 @@ def relax(structure, chgnet, steps=500, fmax=0.01, quiet=True):
     return final, float(energy)
 
 
-def neighbor_info(structure, site_index, cutoff_A=3.2):
+def neighbor_info(structure, site_index, cutoff_A=2.5):
     site = structure[site_index]
     neighbors = structure.get_neighbors(site, cutoff_A)
     distances = sorted(float(n.nn_distance) for n in neighbors)

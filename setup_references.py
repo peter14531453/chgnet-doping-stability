@@ -40,9 +40,19 @@ def _co_hcp():
     )
 
 
+def _ca_fcc():
+    a = 5.588
+    return Structure(
+        Lattice.cubic(a),
+        ["Ca", "Ca", "Ca", "Ca"],
+        [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]],
+    )
+
+
 REFERENCE_BUILDERS = {
     "Al": _al_fcc,
     "Co": _co_hcp,
+    "Ca": _ca_fcc,
 }
 
 

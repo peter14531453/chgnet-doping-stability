@@ -216,7 +216,7 @@ class StabilityReport:
             )
             print(
                 f"  Space group during MD:      {self.md_space_group or 'n/a'}   "
-                f"{_tag(self.space_group_preserved)}"
+                f"(informational only — MD thermal noise always yields P1)"
             )
         print()
 
