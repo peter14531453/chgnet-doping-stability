@@ -22,11 +22,15 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 
 def load_production_frames(trajectory_path, equilibration_frames=0):
+    """Skip the first `equilibration_frames` frames so analysis only covers
+    the production (thermally equilibrated) portion of the trajectory."""
     frames = ase_read(str(trajectory_path), index=":")
     return frames[equilibration_frames:]
 
 
 def find_dopant_index(atoms, dopant_symbol):
+    """Return the atom index of the dopant in the first trajectory frame.
+    Assumes only one dopant atom per supercell (one substitution per run)."""
     matches = [i for i, atom in enumerate(atoms) if atom.symbol == dopant_symbol]
     if not matches:
         raise ValueError(f"No {dopant_symbol} atom found in trajectory frame.")
@@ -36,8 +40,15 @@ def find_dopant_index(atoms, dopant_symbol):
 
 
 def unwrapped_displacements(frames, atom_index):
-    """Return Nx3 array of unwrapped displacements from the first frame."""
-    cell0 = np.asarray(frames[0].get_cell())
+    """Return Nx3 array of unwrapped displacements from the first frame.
+
+    Periodic boundary conditions cause atoms to 'jump' when they cross a
+    cell boundary, which would give artificially large displacements.
+    We track the cumulative fractional-coordinate step each frame and
+    apply the minimum-image convention (subtract nearest integer) so each
+    inter-frame displacement is at most half a lattice vector — then
+    accumulate to get the true unwrapped path.
+    """
     r0 = frames[0].get_positions()[atom_index]
     disps = np.zeros((len(frames), 3))
     prev_wrapped = r0.copy()
@@ -46,8 +57,9 @@ def unwrapped_displacements(frames, atom_index):
         r = atoms.get_positions()[atom_index]
         delta = r - prev_wrapped
         cell = np.asarray(atoms.get_cell())
+        # Convert to fractional coordinates to apply minimum-image convention
         frac_delta = np.linalg.solve(cell.T, delta)
-        frac_delta -= np.round(frac_delta)
+        frac_delta -= np.round(frac_delta)   # wrap to [-0.5, 0.5]
         delta_unwrapped = cell.T @ frac_delta
         cumulative += delta_unwrapped
         disps[i] = cumulative
@@ -56,13 +68,22 @@ def unwrapped_displacements(frames, atom_index):
 
 
 def compute_msd(displacements):
+    """Mean-squared displacement: MSD(t) = <|r(t) - r(0)|^2>.
+    A plateau means the atom is confined (stable site).
+    A linear increase means long-range diffusion (migration)."""
     return np.sum(displacements ** 2, axis=1)
 
 
 def late_time_slope(time_ps, msd, fraction=0.5):
+    """Fit a line to the last `fraction` of the MSD curve and return its slope.
+
+    Using only the late-time portion avoids the initial ballistic/subdiffusive
+    regime. Slope near zero = plateau (stable). Slope >> 0 = diffusing dopant.
+    Threshold in report.py: MSD_PLATEAU_SLOPE_A2_PER_PS = 0.005 A^2/ps.
+    """
     n = len(msd)
     start = int(n * (1 - fraction))
-    if n - start < 4:
+    if n - start < 4:   # too few points for a reliable fit
         return float("nan")
     t = time_ps[start:]
     m = msd[start:]
@@ -71,30 +92,43 @@ def late_time_slope(time_ps, msd, fraction=0.5):
 
 
 def coordination_history(frames, atom_index, cutoff_A=2.5):
+    """Count the number of atoms within cutoff_A of the dopant at every frame.
+
+    cutoff_A=2.5 A isolates the first coordination shell only (e.g. the 6
+    nearest O neighbours for a dopant on an octahedral site in a layered
+    oxide). A larger cutoff would count second-shell transition metals and
+    give a misleadingly large coordination number — see the Al test which
+    showed coord=18 with the old 3.2 A cutoff.
+
+    Ca-O and Mn-O bonds can reach ~2.4 A, so use coordination_cutoff_A=2.7
+    in WorkflowConfig when testing Ca or other large-ion dopants.
+    """
     coords = []
     for atoms in frames:
         positions = atoms.get_positions()
         cell = atoms.get_cell()
         pbc = atoms.get_pbc()
-        n = len(atoms)
         target = positions[atom_index]
         deltas = positions - target
         if any(pbc):
+            # Apply minimum-image convention for periodic boundaries
             frac = np.linalg.solve(np.asarray(cell).T, deltas.T).T
             frac -= np.round(frac)
             deltas = (np.asarray(cell).T @ frac.T).T
         distances = np.linalg.norm(deltas, axis=1)
-        distances[atom_index] = np.inf
+        distances[atom_index] = np.inf   # exclude self
         coords.append(int(np.sum(distances < cutoff_A)))
     return coords
 
 
 def mean_nn_distance(frames, atom_index, cutoff_A=2.5):
+    """Average distance from the dopant to all first-shell neighbours
+    across all production frames. Comparing this to the relaxed (0 K)
+    value shows whether the local bond length expands at temperature."""
     distances_all = []
     for atoms in frames:
         positions = atoms.get_positions()
         cell = atoms.get_cell()
-        n = len(atoms)
         target = positions[atom_index]
         deltas = positions - target
         frac = np.linalg.solve(np.asarray(cell).T, deltas.T).T
@@ -109,12 +143,25 @@ def mean_nn_distance(frames, atom_index, cutoff_A=2.5):
 
 
 def volume_change_pct(frames):
+    """Percentage change in unit-cell volume from the first to last frame.
+    A large change (> ±5 %) indicates mechanical instability of the doped
+    structure at the simulation temperature."""
     v0 = frames[0].get_volume()
     vT = frames[-1].get_volume()
     return float((vT - v0) / v0 * 100)
 
 
 def average_space_group(frames, symprec=0.05, sample=20):
+    """Estimate the space group of the time-averaged structure.
+
+    NOTE: thermal motion breaks crystallographic symmetry — any MD run at
+    finite temperature will appear as P1 if individual frames are analysed.
+    Here we average atom positions over `sample` evenly spaced frames and
+    then run SpacegroupAnalyzer on that averaged geometry. This is still
+    approximate; the result is reported as informational only (not used in
+    the PASS/FAIL verdict) because residual thermal noise often prevents
+    recovery of the true space group even after averaging.
+    """
     indices = np.linspace(0, len(frames) - 1, min(sample, len(frames)), dtype=int)
     sampled = [frames[i] for i in indices]
     positions = np.mean([atoms.get_positions() for atoms in sampled], axis=0)

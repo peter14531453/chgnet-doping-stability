@@ -21,10 +21,27 @@ from datetime import datetime
 from pathlib import Path
 
 
-EF_THRESHOLD_FAVORABLE = 0.0
-EF_THRESHOLD_OK = 1.0
+# --- Stability thresholds ---------------------------------------------------
+# These control the PASS/FAIL criteria in StabilityReport. Adjust here if
+# you want stricter or looser definitions for your material system.
+
+# Formation energy: below 0 eV is thermodynamically very favourable;
+# below 1 eV is marginally feasible under equilibrium conditions.
+EF_THRESHOLD_FAVORABLE = 0.0      # eV — "very good" boundary
+EF_THRESHOLD_OK = 1.0             # eV — overall PASS/FAIL boundary
+
+# MSD slope: a dopant oscillating around one site has a slope near zero.
+# Above this threshold we call it "migrating". 0.005 A^2/ps corresponds
+# to roughly one bond-length hop over the entire 50 ps production run.
 MSD_PLATEAU_SLOPE_A2_PER_PS = 0.005
+
+# Coordination tolerance: how many neighbours (within cutoff_A) the dopant
+# is allowed to gain or lose during MD vs the relaxed value. ±1 covers
+# normal thermal fluctuations without flagging normal vibration as collapse.
 COORDINATION_TOLERANCE = 1
+
+# Volume tolerance: >5% volume change during MD usually signals mechanical
+# instability or a phase transition at the simulation temperature.
 VOLUME_CHANGE_TOLERANCE_PCT = 5.0
 
 
@@ -121,6 +138,26 @@ class StabilityReport:
 
     @property
     def verdict(self):
+        """Combine all PASS/FAIL criteria into a single human-readable verdict.
+
+        Decision tree
+        -------------
+        No MD data yet:
+            INCOMPLETE          — nothing has been calculated
+            FAVORABLE/UNFAVORABLE (relaxation only) — E_f known, no MD yet
+
+        MD data available:
+            structural_ok = coordination AND lattice both pass (or are skipped)
+
+            STABLE              — E_f ok  AND MSD plateaus AND structure intact
+            METASTABLE          — E_f too high BUT MD shows dopant stays put;
+                                  achievable via non-equilibrium synthesis
+            MIGRATION           — E_f ok BUT dopant moves during MD;
+                                  the relaxed site is not the true resting site
+            STRUCTURAL COLLAPSE — lattice or coordination breaks down;
+                                  doped phase is mechanically unstable at T
+            UNSTABLE            — catch-all for other failure combinations
+        """
         ef = self.ef_pass
         msd = self.msd_pass
         coord = self.coordination_pass
@@ -131,6 +168,7 @@ class StabilityReport:
                 return "INCOMPLETE"
             return "FAVORABLE (relaxation only)" if ef else "UNFAVORABLE (relaxation only)"
 
+        # structural_ok is False only when a criterion actively fails (not None)
         structural_ok = (coord is not False) and (latt is not False)
 
         if ef and msd and structural_ok:
