@@ -9,6 +9,7 @@ E_f = E(doped) - E(pristine) + mu(removed) - mu(dopant)
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -91,34 +92,89 @@ def relax(structure, chgnet, steps=500, fmax=0.01):
 def neighbor_info(structure, site_index, cutoff_A=3.2):
     site = structure[site_index]
     neighbors = structure.get_neighbors(site, cutoff_A)
-    distances = sorted(n.nn_distance for n in neighbors)
+    distances = sorted(float(n.nn_distance) for n in neighbors)
     return distances, len(distances)
 
 
-def relax_pristine(primitive_cif, supercell_size, chgnet, output_dir="relaxed_structures"):
+def _pristine_paths(output_dir, formula, supercell_size):
+    base = Path(output_dir) / f"{formula}_pristine_{supercell_size}"
+    return base.with_suffix(".cif"), base.with_suffix(".json")
+
+
+def _doped_paths(output_dir, formula, dopant, target_element, label):
+    base = Path(output_dir) / f"{formula}_{dopant}@{target_element}_{label}"
+    return base.with_suffix(".cif"), base.with_suffix(".json")
+
+
+def relax_pristine(primitive_cif, supercell_size, chgnet, output_dir="relaxed_structures", force=False):
     primitive, supercell = build_supercell(primitive_cif, supercell_size)
+    formula = primitive.composition.reduced_formula
+    cif_path, meta_path = _pristine_paths(output_dir, formula, supercell_size)
+
+    if not force and cif_path.exists() and meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            final = Structure.from_file(str(cif_path))
+            print(
+                f"  [cached] E(pristine) = {meta['energy_eV']:.4f} eV   "
+                f"SG = {meta['space_group']}   -> {cif_path}"
+            )
+            return primitive, supercell, final, float(meta["energy_eV"]), meta["space_group"]
+        except Exception as exc:
+            print(f"  warning: pristine cache unreadable ({exc}); recomputing")
+
     print(f"Pristine supercell: {supercell.composition.reduced_formula}  ({len(supercell)} atoms)")
     final, energy = relax(supercell, chgnet)
     sg = "{} ({})".format(*final.get_space_group_info())
-    out_path = Path(output_dir) / f"{primitive.composition.reduced_formula}_pristine_{supercell_size}.cif"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    final.to(filename=str(out_path))
-    print(f"  E(pristine) = {energy:.4f} eV   SG = {sg}   -> {out_path}")
+    cif_path.parent.mkdir(parents=True, exist_ok=True)
+    final.to(filename=str(cif_path))
+    meta_path.write_text(json.dumps({"energy_eV": float(energy), "space_group": sg}, indent=2))
+    print(f"  E(pristine) = {energy:.4f} eV   SG = {sg}   -> {cif_path}")
     return primitive, supercell, final, energy, sg
 
 
-def relax_doped(supercell, site_index, dopant, target_element, chgnet, output_dir="relaxed_structures", label=None):
-    doped = substitute(supercell, site_index, dopant)
+def relax_doped(supercell, site_index, dopant, target_element, chgnet, output_dir="relaxed_structures", label=None, force=False):
     label = label or f"site{site_index}"
+    formula = supercell.composition.reduced_formula
+    cif_path, meta_path = _doped_paths(output_dir, formula, dopant, target_element, label)
+
+    if not force and cif_path.exists() and meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            final = Structure.from_file(str(cif_path))
+            print(
+                f"  [cached][{label}] E = {meta['energy_eV']:.4f} eV   "
+                f"SG = {meta['space_group']}   coord = {meta['coordination']}"
+            )
+            return RelaxedConfiguration(
+                site_index=int(meta["site_index"]),
+                dopant=dopant,
+                target_element=target_element,
+                final_structure=final,
+                final_energy_eV=float(meta["energy_eV"]),
+                relaxed_space_group=meta["space_group"],
+                nn_distances_A=[float(d) for d in meta["nn_distances_A"]],
+                coordination_number=int(meta["coordination"]),
+            )
+        except Exception as exc:
+            print(f"  warning: doped cache unreadable for {label} ({exc}); recomputing")
+
+    doped = substitute(supercell, site_index, dopant)
     final, energy = relax(doped, chgnet)
     sg = "{} ({})".format(*final.get_space_group_info())
     distances, coord = neighbor_info(final, site_index)
-    out_path = Path(output_dir) / f"{supercell.composition.reduced_formula}_{dopant}@{target_element}_{label}.cif"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    final.to(filename=str(out_path))
+    cif_path.parent.mkdir(parents=True, exist_ok=True)
+    final.to(filename=str(cif_path))
+    meta_path.write_text(json.dumps({
+        "site_index": int(site_index),
+        "energy_eV": float(energy),
+        "space_group": sg,
+        "coordination": int(coord),
+        "nn_distances_A": [float(d) for d in distances],
+    }, indent=2))
     print(
         f"  [{label}] E = {energy:.4f} eV   SG = {sg}   "
-        f"coord({dopant}) = {coord}   mean d = {sum(distances)/len(distances):.3f} A   -> {out_path}"
+        f"coord({dopant}) = {coord}   mean d = {sum(distances)/len(distances):.3f} A   -> {cif_path}"
     )
     return RelaxedConfiguration(
         site_index=site_index,

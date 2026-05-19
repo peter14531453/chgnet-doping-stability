@@ -12,6 +12,7 @@ Loads the production segment of an MD trajectory and computes:
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -154,11 +155,24 @@ def save_rdf(frames, atom_index, output_path, r_max=6.0, n_bins=120):
     return centers, g
 
 
-def analyze(md_result, dopant_symbol, cutoff_A=3.2, output_dir="analysis"):
+def analyze(md_result, dopant_symbol, cutoff_A=3.2, output_dir="analysis", force=False):
     traj_path = md_result["trajectory_path"]
     eq = md_result.get("equilibration_frames", 0)
     timestep_fs = md_result["timestep_fs"]
     loginterval = md_result["loginterval"]
+
+    label = Path(traj_path).parent.name
+    out_dir = Path(output_dir) / label
+    out_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = out_dir / "analysis.json"
+
+    if not force and cache_path.exists():
+        try:
+            cached = json.loads(cache_path.read_text())
+            print(f"  [cached] Trajectory analysis -> {cache_path}")
+            return cached
+        except Exception as exc:
+            print(f"  warning: analysis cache unreadable ({exc}); recomputing")
 
     frames = load_production_frames(traj_path, equilibration_frames=eq)
     if not frames:
@@ -179,8 +193,6 @@ def analyze(md_result, dopant_symbol, cutoff_A=3.2, output_dir="analysis"):
     dv = volume_change_pct(frames)
     sg = average_space_group(frames)
 
-    label = Path(traj_path).parent.name
-    out_dir = Path(output_dir) / label
     save_rdf(frames, dopant_index, out_dir / "rdf.csv")
     np.savetxt(out_dir / "msd.csv", np.column_stack([time_ps, msd]),
                header="time_ps,msd_A2", comments="")
@@ -188,16 +200,18 @@ def analyze(md_result, dopant_symbol, cutoff_A=3.2, output_dir="analysis"):
                np.column_stack([time_ps, coord]),
                header="time_ps,coord", comments="", fmt=["%.4f", "%d"])
 
-    return {
-        "msd_slope_A2_per_ps": slope,
+    result = {
+        "msd_slope_A2_per_ps": float(slope),
         "msd_final_A2": float(msd[-1]),
-        "max_displacement_A": max_disp,
+        "max_displacement_A": float(max_disp),
         "coordination_min": int(min(coord)),
         "coordination_max": int(max(coord)),
         "coordination_mean": float(np.mean(coord)),
-        "mean_nn_distance_A": nn,
-        "volume_change_pct": dv,
+        "mean_nn_distance_A": float(nn),
+        "volume_change_pct": float(dv),
         "space_group": sg,
-        "n_frames": n_frames,
+        "n_frames": int(n_frames),
         "output_dir": str(out_dir),
     }
+    cache_path.write_text(json.dumps(result, indent=2))
+    return result

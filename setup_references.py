@@ -75,7 +75,7 @@ def compute_references(elements, chgnet=None, model_name="r2scan", save_path=REF
                 "Add a builder to REFERENCE_BUILDERS or pass a Structure to mu_from_structure."
             )
         structure = REFERENCE_BUILDERS[element]()
-        mus[element] = mu_from_structure(structure, element, chgnet, optimizer=optimizer)
+        mus[element] = float(mu_from_structure(structure, element, chgnet, optimizer=optimizer))
         print(f"  mu({element}) = {mus[element]:.4f} eV/atom")
     Path(save_path).write_text(json.dumps(mus, indent=2))
     print(f"Saved chemical potentials -> {save_path}")

@@ -4,3 +4,5 @@ ase>=3.23.0
 numpy>=1.26
 scipy>=1.10
 torch>=2.4.1
+tqdm>=4.66
+colorama>=0.4.6

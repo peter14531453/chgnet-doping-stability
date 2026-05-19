@@ -48,19 +48,51 @@ These combine into one of:
 | **STRUCTURAL COLLAPSE** | Lattice or symmetry distorts beyond tolerance. |
 | **FAVORABLE / UNFAVORABLE (relaxation only)** | Verdict before MD runs. |
 
+## Checkpointing and resume
+
+Every phase writes its result to disk. Reruns of `python run_workflow.py`
+skip any phase whose output already exists, so a paused or crashed run
+picks up where it stopped.
+
+| Phase | Checkpoint files |
+|---|---|
+| 1. References | `references.json` |
+| 2. Pristine relax | `relaxed_structures/<host>_pristine_N.cif` + `.json` sidecar |
+| 3. Doped relax | `relaxed_structures/<host>_<dopant>@<elem>_siteI.cif` + `.json` |
+| 4. MD | `md_runs/<test>/md.traj` + `md.complete.json` marker |
+| 5. Analysis | `analysis/<test>/analysis.json` (plus msd.csv, rdf.csv, coordination.csv) |
+| 6. Report | `reports/<test>.json` |
+
+**MD additionally supports mid-run resume.** If a previous run was killed
+partway through the trajectory, the next run reads the existing `md.traj`,
+starts a new MD segment from the last frame (velocities preserved), and
+concatenates the segments when complete. The `md.complete.json` marker is
+only written when the full step count is reached.
+
+To force a full recompute, set `force_recompute=True` in `WorkflowConfig`
+or delete the relevant checkpoint files.
+
+## Progress bar
+
+Each test gets a tqdm bar pinned to the bottom of the terminal showing
+relaxation + MD + analysis progress in real time, with elapsed and remaining
+time. Use `info(msg)` from `progress.py` instead of `print()` inside the
+workflow so the bar redraws cleanly underneath your output.
+
 ## Project layout
 
 ```
 report.py              Stability evaluation + structured printout
 setup_references.py    Phase 1 -- chemical potentials
 enumerate_and_relax.py Phase 2-3 -- site enumeration, relaxation, E_f
-run_md.py              Phase 4 -- NVT molecular dynamics
+run_md.py              Phase 4 -- NVT MD with checkpoint + mid-run resume
 analyze_trajectory.py  Phase 5 -- MSD, coordination, RDF, lattice
+progress.py            Bottom-pinned tqdm progress bar
 run_workflow.py        Orchestrator (configure + run all phases)
 primitive_cells/       Input CIF files for host crystals
-relaxed_structures/    Pristine + doped relaxed CIFs (output)
-md_runs/               Per-test MD trajectories + logs (output)
-analysis/              Per-test MSD/coordination/RDF CSVs (output)
+relaxed_structures/    Pristine + doped relaxed CIFs + sidecar JSON (output)
+md_runs/               Per-test MD trajectories + completion markers (output)
+analysis/              Per-test MSD/coordination/RDF CSVs + analysis.json (output)
 reports/               Per-test JSON reports + summary.csv (output)
 ```
 
