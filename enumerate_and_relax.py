@@ -199,12 +199,30 @@ def relax_doped(supercell, site_index, dopant, target_element, chgnet, output_di
 
 
 def formation_energy(doped_energy, pristine_energy, mu_removed_list, mu_dopant):
-    """
-    E_f = E(doped) - E(pristine) + sum(mu of every removed atom) - mu(dopant)
+    """Defect formation energy in eV.
 
-    mu_removed_list accepts either a single float (backward compat) or a
-    list of floats covering the substituted site atom plus any
-    charge-compensation atoms removed from the supercell.
+    Formula
+    -------
+    E_f = E(doped) - E(pristine) + Σ μ(removed atoms) - μ(dopant)
+
+    Sign convention
+    ---------------
+    Negative E_f  →  dopant incorporation is thermodynamically favourable.
+    Positive E_f  →  dopant incorporation is endothermic; may still occur
+                     under non-equilibrium (e.g. quench, ion-exchange).
+
+    mu_removed_list
+    ---------------
+    Pass a list of chemical potentials (eV/atom) for every atom removed
+    from the supercell: [mu(target_site_element)] for isovalent/positive-
+    mismatch cases, or [mu(target), mu(Na), ...] when Na vacancies are
+    added for charge compensation. Accepts a bare float for backward compat.
+
+    Chemical potential reference
+    ----------------------------
+    mu values come from CHGNet-relaxed elemental structures (metal-rich
+    conditions). For oxide-rich / more realistic synthesis conditions the
+    user should substitute oxide-phase mu values; the formula is the same.
     """
     if isinstance(mu_removed_list, (int, float)):
         mu_removed_list = [mu_removed_list]

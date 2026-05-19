@@ -9,7 +9,7 @@ __pycache__/
 Miniconda3-*.exe
 *.exe
 
-# Workflow outputs (regenerable)
+# Workflow outputs (regenerable — except relaxed_structures which acts as cache)
 md_runs/
 analysis/
 reports/

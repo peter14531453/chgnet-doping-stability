@@ -97,14 +97,30 @@ def build_compensated_supercell(
     mismatch: int,
     compensation_ref: str = "Na",
 ):
-    """
-    Return (doped_structure, compensation_applied: bool, warnings: list[str]).
+    """Build a charge-compensated doped supercell.
 
-    For mismatch < 0: substitute dopant at site_index, then remove
-    abs(mismatch) compensation_ref atoms that are furthest from the
-    dopant site (minimises defect-defect interaction).
+    Returns (doped_structure, compensation_applied: bool, warnings: list[str]).
 
-    For mismatch >= 0: substitute only (no structural compensation).
+    Strategy
+    --------
+    mismatch < 0  (dopant brings less positive charge, e.g. Ca2+ → Co3+)
+        Remove |mismatch| Na atoms from the supercell so the net charge
+        of the defect complex is zero. We pick the Na atoms *furthest*
+        from the dopant site first — large separation minimises the
+        Coulomb interaction between the dopant and the vacancy, giving
+        a better approximation to the dilute (isolated defect) limit.
+        The E_f formula is updated in enumerate_and_relax.formation_energy
+        to include the +mu(Na) term for each removed Na.
+
+    mismatch == 0  (isovalent, e.g. Mn3+ → Co3+)
+        Plain substitution, no structural modification. E_f is reliable.
+
+    mismatch > 0  (dopant brings more positive charge, e.g. Mn3+ → Na+)
+        Compensation would require adding electrons, which is not possible
+        in a charge-neutral MLIP. Run plain substitution and flag E_f as
+        approximate. In practice, positive mismatch cases in layered oxides
+        are compensated by Co3+→Co4+ oxidation; this cannot be modelled
+        without a charge-aware potential.
     """
     doped = structure.copy()
     doped.replace(site_index, dopant)
@@ -131,15 +147,19 @@ def build_compensated_supercell(
         )
         return doped, False, warnings
 
+    # Rank Na sites by distance from dopant (descending) and remove the
+    # furthest ones — this maximises dopant-vacancy separation and reduces
+    # artificial defect-defect interaction in the finite supercell.
     dopant_frac = doped[site_index].frac_coords
     lattice = doped.lattice
     distances = []
     for i in ref_indices:
         d = doped[i].frac_coords - dopant_frac
-        d -= np.round(d)
+        d -= np.round(d)   # minimum image
         distances.append((i, np.linalg.norm(lattice.get_cartesian_coords(d))))
 
     distances.sort(key=lambda x: x[1], reverse=True)
+    # Remove highest-index sites first so lower indices stay valid
     to_remove = sorted([idx for idx, _ in distances[:n_remove]], reverse=True)
     doped.remove_sites(to_remove)
 
