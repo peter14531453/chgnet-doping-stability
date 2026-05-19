@@ -58,6 +58,24 @@ def _na_bcc():
     )
 
 
+def _k_bcc():
+    a = 5.225
+    return Structure(
+        Lattice.cubic(a),
+        ["K", "K"],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+    )
+
+
+def _ni_fcc():
+    a = 3.524
+    return Structure(
+        Lattice.cubic(a),
+        ["Ni", "Ni", "Ni", "Ni"],
+        [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]],
+    )
+
+
 def _mn_bcc():
     # BCC Mn used as a computationally tractable reference.
     # True ground state is alpha-Mn (58-atom complex cell); this simpler
@@ -75,6 +93,8 @@ REFERENCE_BUILDERS = {
     "Co": _co_hcp,
     "Ca": _ca_fcc,
     "Na": _na_bcc,
+    "K": _k_bcc,
+    "Ni": _ni_fcc,
     "Mn": _mn_bcc,
 }
 
@@ -96,11 +116,17 @@ def mu_from_structure(structure, target_element, chgnet, optimizer=None, fmax=0.
     return final_energy / len(result["final_structure"])
 
 
-def compute_references(elements, chgnet=None, model_name="r2scan", save_path=REFERENCES_FILE):
+def compute_references(
+    elements,
+    chgnet=None,
+    model_name="r2scan",
+    save_path=REFERENCES_FILE,
+    existing: dict | None = None,
+):
     """Compute mu (eV/atom) for each element in `elements` and save to JSON."""
     chgnet = chgnet or CHGNet.load(model_name=model_name)
     optimizer = StructOptimizer(model=chgnet)
-    mus = {}
+    mus = dict(existing or {})
     for element in elements:
         if element not in REFERENCE_BUILDERS:
             raise KeyError(
@@ -123,13 +149,18 @@ def load_references(path=REFERENCES_FILE):
 
 
 def get_or_compute_references(elements, chgnet=None, path=REFERENCES_FILE, force=False):
-    if not force:
-        cached = load_references(path)
-        if cached is not None and all(e in cached for e in elements):
-            print(f"Loaded chemical potentials from {path}: "
-                  + ", ".join(f"mu({e})={cached[e]:.4f}" for e in elements))
-            return cached
-    return compute_references(elements, chgnet=chgnet, save_path=path)
+    cached = None if force else load_references(path)
+    if cached is not None and all(e in cached for e in elements):
+        print(
+            f"Loaded chemical potentials from {path}: "
+            + ", ".join(f"mu({e})={cached[e]:.4f}" for e in elements)
+        )
+        return {e: cached[e] for e in elements}
+
+    missing = list(elements) if cached is None else [e for e in elements if e not in cached]
+    return compute_references(
+        missing, chgnet=chgnet, save_path=path, existing=cached,
+    )
 
 
 if __name__ == "__main__":
