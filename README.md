@@ -5,9 +5,10 @@ for determining whether a dopant element is **thermodynamically stable**,
 **kinetically dopable**, and **where it sits** in a target crystal at a
 specified temperature.
 
-The default configuration substitutes **Al for Co in NaCoO2** at **250 C**,
-which is the original experimental question this code was built around. Every
-parameter is exposed in [run_workflow.py](run_workflow.py).
+The workflow targets layered **ACoO2** cathodes (**NaCoO2** or **KCoO2**)
+with command-line control over host lattice, dopant, and substitution layer.
+Additional settings (supercell size, MD temperature, step counts) live in
+`WorkflowConfig` inside [run_workflow.py](run_workflow.py).
 
 ## What it does
 
@@ -69,8 +70,8 @@ starts a new MD segment from the last frame (velocities preserved), and
 concatenates the segments when complete. The `md.complete.json` marker is
 only written when the full step count is reached.
 
-To force a full recompute, set `force_recompute=True` in `WorkflowConfig`
-or delete the relevant checkpoint files.
+To force a full recompute, pass `--force-recompute` or delete the relevant
+checkpoint files.
 
 ## Progress bar
 
@@ -89,7 +90,7 @@ run_md.py              Phase 4 -- NVT MD with checkpoint + mid-run resume
 analyze_trajectory.py  Phase 5 -- MSD, coordination, RDF, lattice
 progress.py            Bottom-pinned tqdm progress bar
 run_workflow.py        Orchestrator (configure + run all phases)
-primitive_cells/       Input CIF files for host crystals
+primitive_cells/       Input CIF files (NaCoO2.cif, KCoO2.cif)
 relaxed_structures/    Pristine + doped relaxed CIFs + sidecar JSON (output)
 md_runs/               Per-test MD trajectories + completion markers (output)
 analysis/              Per-test MSD/coordination/RDF CSVs + analysis.json (output)
@@ -112,11 +113,58 @@ Visual C++ Build Tools** (Desktop development with C++ workload):
 
 ```powershell
 conda activate chgnet
-python run_workflow.py
+python run_workflow.py --dopant Al --host NaCoO2 --sites Co
 ```
 
-To change dopant, host, or temperature, edit the `WorkflowConfig` block at the
-bottom of `run_workflow.py`.
+`--dopant` is required. Other flags are optional.
+
+### Command-line options
+
+| Flag | Description |
+|------|-------------|
+| `--host` | Host lattice: `NaCoO2` (default) or `KCoO2` |
+| `--dopant` | Dopant element (see table below) |
+| `--sites` | One or more substitution layers (see below). Default: `Co` and the host alkali |
+| `--no-md` | Skip MD and trajectory analysis (relaxation + E_f only) |
+| `--force-recompute` | Ignore cached relaxations, MD, and analysis |
+
+### Dopants and substitution layers
+
+| Layer (`--sites`) | Valid dopants (`--dopant`) |
+|-------------------|----------------------------|
+| `Co` | `Al`, `Ni`, `Mn` |
+| Alkali (`Na` for NaCoO2, `K` for KCoO2, or `alkali`) | `Mn`, `Ca` |
+
+For `--sites`, each token is one of:
+
+- `Co` — transition-metal layer
+- `alkali` — Na (NaCoO2) or K (KCoO2), depending on `--host`
+- `Na` or `K` — explicit alkali symbol (must match the host)
+
+### Examples
+
+```powershell
+# Al on Co in NaCoO2
+python run_workflow.py --host NaCoO2 --dopant Al --sites Co
+
+# Mn on both Co and Na layers (site-preference comparison)
+python run_workflow.py --host NaCoO2 --dopant Mn
+
+# Ca on the K layer in KCoO2
+python run_workflow.py --host KCoO2 --dopant Ca --sites alkali
+
+# Ni on Co in KCoO2, both layers, no MD
+python run_workflow.py --host KCoO2 --dopant Ni --sites Co K --no-md
+
+# Full help
+python run_workflow.py --help
+```
+
+Charge compensation uses **Na** for NaCoO2 and **K** for KCoO2 automatically.
+Oxidation states for the dopant are set from the CLI choice (e.g. Mn3+, Ca2+).
+
+To change MD temperature, timestep, or step counts, edit `config_from_args` or
+`WorkflowConfig` in [run_workflow.py](run_workflow.py).
 
 ## Caveats
 

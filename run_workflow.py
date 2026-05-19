@@ -11,12 +11,16 @@ Supports:
   - Per-phase caching and MD mid-run resume (see checkpoint files).
   - Bottom-pinned tqdm progress bar per test.
 
-Configure the WorkflowConfig block at the bottom and run:
+Run from the command line, e.g.:
 
-    python run_workflow.py
+    python run_workflow.py --host NaCoO2 --dopant Al --sites Co
+    python run_workflow.py --host KCoO2 --dopant Mn --sites alkali
+    python run_workflow.py --host NaCoO2 --dopant Mn --sites Co Na
 """
 from __future__ import annotations
 
+import argparse
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -37,6 +41,161 @@ from run_md import MDRunSpec, run_md
 from analyze_trajectory import analyze
 from report import StabilityReport, write_summary_table
 from progress import info, loop_progress_bar, test_progress_bar
+
+
+HOSTS: dict[str, dict[str, str]] = {
+    "NaCoO2": {
+        "primitive_cell_file": "primitive_cells/NaCoO2.cif",
+        "host_formula": "NaCoO2",
+        "compensation_ref": "Na",
+        "alkali_site": "Na",
+    },
+    "KCoO2": {
+        "primitive_cell_file": "primitive_cells/KCoO2.cif",
+        "host_formula": "KCoO2",
+        "compensation_ref": "K",
+        "alkali_site": "K",
+    },
+}
+
+CO_SUBSTITUTION_DOPANTS = frozenset({"Al", "Ni", "Mn"})
+ALKALI_SUBSTITUTION_DOPANTS = frozenset({"Mn", "Ca"})
+
+DOPANT_OXIDATION_STATES: dict[str, int] = {
+    "Al": 3,
+    "Ni": 3,
+    "Mn": 3,
+    "Ca": 2,
+}
+
+
+def _resolve_target_elements(host: str, sites: list[str] | None) -> list[str]:
+    """Map CLI site tokens to element symbols for the chosen host."""
+    host_cfg = HOSTS[host]
+    alkali = host_cfg["alkali_site"]
+
+    if sites is None:
+        return ["Co", alkali]
+
+    resolved: list[str] = []
+    for site in sites:
+        token = site.lower()
+        if token == "alkali":
+            resolved.append(alkali)
+        elif token == "co":
+            resolved.append("Co")
+        elif token in ("na", "k"):
+            if token != alkali.lower():
+                raise ValueError(
+                    f"Site '{site}' does not match host {host} "
+                    f"(use '{alkali}' or 'alkali')."
+                )
+            resolved.append(alkali)
+        else:
+            raise ValueError(f"Unknown site token: {site!r}")
+
+    # preserve order, drop duplicates
+    seen: set[str] = set()
+    unique: list[str] = []
+    for elem in resolved:
+        if elem not in seen:
+            seen.add(elem)
+            unique.append(elem)
+    return unique
+
+
+def _validate_dopant_for_targets(dopant: str, target_elements: list[str]) -> None:
+    for target in target_elements:
+        if target == "Co" and dopant not in CO_SUBSTITUTION_DOPANTS:
+            allowed = ", ".join(sorted(CO_SUBSTITUTION_DOPANTS))
+            raise ValueError(
+                f"Dopant '{dopant}' is not valid for Co substitution. "
+                f"Choose one of: {allowed}."
+            )
+        if target in ("Na", "K") and dopant not in ALKALI_SUBSTITUTION_DOPANTS:
+            allowed = ", ".join(sorted(ALKALI_SUBSTITUTION_DOPANTS))
+            raise ValueError(
+                f"Dopant '{dopant}' is not valid for alkali-site substitution. "
+                f"Choose one of: {allowed}."
+            )
+
+
+def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="CHGNet doping-stability workflow for layered ACoO2 cathodes.",
+    )
+    parser.add_argument(
+        "--host",
+        choices=sorted(HOSTS),
+        default="NaCoO2",
+        help="Primitive cell / host lattice (default: NaCoO2).",
+    )
+    parser.add_argument(
+        "--dopant",
+        required=True,
+        help=(
+            "Dopant element. For Co sites: Al, Ni, or Mn. "
+            "For alkali sites: Mn or Ca."
+        ),
+    )
+    parser.add_argument(
+        "--sites",
+        nargs="+",
+        metavar="SITE",
+        help=(
+            "Layer(s) to substitute. Each SITE is Co, alkali (Na or K for the host), "
+            "or the explicit alkali symbol (Na/K). Default: Co and the host alkali."
+        ),
+    )
+    parser.add_argument(
+        "--no-md",
+        action="store_true",
+        help="Skip MD and trajectory analysis (relaxation + formation energy only).",
+    )
+    parser.add_argument(
+        "--force-recompute",
+        action="store_true",
+        help="Ignore cached relaxations, MD, and analysis outputs.",
+    )
+    return parser.parse_args(argv)
+
+
+def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
+    dopant = args.dopant.strip().capitalize()
+    if dopant not in DOPANT_OXIDATION_STATES:
+        raise ValueError(
+            f"Unknown dopant '{args.dopant}'. "
+            f"Supported: {', '.join(sorted(DOPANT_OXIDATION_STATES))}."
+        )
+
+    host_cfg = HOSTS[args.host]
+    target_elements = _resolve_target_elements(args.host, args.sites)
+    _validate_dopant_for_targets(dopant, target_elements)
+
+    primitive_path = Path(host_cfg["primitive_cell_file"])
+    if not primitive_path.is_file():
+        raise FileNotFoundError(
+            f"Primitive cell not found: {primitive_path}. "
+            f"Add a CIF for {args.host} under primitive_cells/."
+        )
+
+    return WorkflowConfig(
+        primitive_cell_file=host_cfg["primitive_cell_file"],
+        host_formula=host_cfg["host_formula"],
+        target_elements=target_elements,
+        dopant=dopant,
+        compensation_ref=host_cfg["compensation_ref"],
+        dopant_oxidation_state=DOPANT_OXIDATION_STATES[dopant],
+        run_md=not args.no_md,
+        force_recompute=args.force_recompute,
+        md_spec=MDRunSpec(
+            temperature_C=250.0,
+            timestep_fs=2.0,
+            equilibration_steps=2500,
+            production_steps=25000,
+            loginterval=10,
+        ),
+    )
 
 
 @dataclass
@@ -285,28 +444,10 @@ def run(config):
 
 
 if __name__ == "__main__":
-    config = WorkflowConfig(
-        primitive_cell_file="primitive_cells/NaCoO2.cif",
-        host_formula="NaCoO2",
-        target_elements=["Co", "Na"],   # test both layers
-        dopant="Mn",
-        supercell_size=2,
-        chgnet_model="r2scan",
-        run_md=True,
-        md_top_n=1,                     # MD on best site per layer
-        md_spec=MDRunSpec(
-            temperature_C=250.0,
-            timestep_fs=2.0,
-            equilibration_steps=2500,
-            production_steps=25000,
-            loginterval=10,
-        ),
-        force_recompute=False,
-        coordination_cutoff_A=2.5,
-        charge_compensate=True,
-        compensation_ref="Na",
-        dopant_oxidation_state=3,       # Mn3+ most common in layered oxides
-        # Mn3+ @ Co3+: mismatch = 0 (isovalent, no compensation needed)
-        # Mn3+ @ Na+:  mismatch = +2 (surplus — runs uncompensated, E_f approximate)
-    )
+    try:
+        cli_args = parse_cli_args()
+        config = config_from_args(cli_args)
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        sys.exit(2)
     run(config)
