@@ -9,7 +9,9 @@ E_f = E(doped) - E(pristine) + mu(removed) - mu(dopant)
 """
 from __future__ import annotations
 
+import io
 import json
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -81,9 +83,17 @@ def substitute(structure, site_index, dopant):
     return doped
 
 
-def relax(structure, chgnet, steps=500, fmax=0.01):
-    optimizer = StructOptimizer(model=chgnet)
-    result = optimizer.relax(structure, steps=steps, fmax=fmax, verbose=False)
+def relax(structure, chgnet, steps=500, fmax=0.01, quiet=True):
+    """Relax `structure` with CHGNet. quiet=True silences CHGNet's per-call
+    "CHGNet will run on cpu" prints so the progress bar isn't drowned."""
+    buf = io.StringIO()
+    if quiet:
+        with redirect_stdout(buf), redirect_stderr(buf):
+            optimizer = StructOptimizer(model=chgnet)
+            result = optimizer.relax(structure, steps=steps, fmax=fmax, verbose=False)
+    else:
+        optimizer = StructOptimizer(model=chgnet)
+        result = optimizer.relax(structure, steps=steps, fmax=fmax, verbose=False)
     final = result["final_structure"]
     energy = result["trajectory"].energies[-1]
     return final, float(energy)

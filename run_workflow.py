@@ -94,8 +94,9 @@ def run(config):
 
     header("Phase 3: relax each doped configuration + formation energies")
     configurations = []
-    with loop_progress_bar(len(candidates), "Phase 3 doped relaxations") as bar:
-        for candidate in candidates:
+    n_candidates = len(candidates)
+    with loop_progress_bar(n_candidates, "Phase 3 doped relaxations") as bar:
+        for i, candidate in enumerate(candidates):
             label = f"site{candidate.site_index}"
             relaxed = relax_doped(
                 pristine_final, candidate.site_index, config.dopant, config.target_element,
@@ -109,8 +110,12 @@ def run(config):
                 mu_dopant=mus[config.dopant],
             )
             info(f"  [{label}] E_f = {e_f:+.4f} eV")
-            configurations.append((candidate, relaxed, e_f))
             bar.update(1)
+            info(
+                f"  >>> Phase 3 progress: {i+1}/{n_candidates} "
+                f"({(i+1)/n_candidates*100:.1f}%) <<<"
+            )
+            configurations.append((candidate, relaxed, e_f))
 
     configurations.sort(key=lambda x: x[2])
 
