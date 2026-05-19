@@ -72,6 +72,30 @@ class TestProgress:
 
 
 @contextmanager
+def loop_progress_bar(total, desc):
+    """Simple bottom-pinned bar that ticks once per iteration."""
+    bar = tqdm(
+        total=total,
+        desc=desc,
+        bar_format=(
+            "{desc} |{bar}| {n_fmt}/{total_fmt}  {percentage:5.1f}%  "
+            "[elapsed {elapsed}, remaining {remaining}]"
+        ),
+        position=0,
+        leave=True,
+        dynamic_ncols=True,
+        ascii=" =",
+        file=sys.stdout,
+        mininterval=0.2,
+    )
+    try:
+        yield bar
+    finally:
+        bar.refresh()
+        bar.close()
+
+
+@contextmanager
 def test_progress_bar(test_name, total_md_steps):
     """Context manager that yields a TestProgress with the bar pinned at bottom."""
     bar = tqdm(

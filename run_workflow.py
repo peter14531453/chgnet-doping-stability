@@ -32,7 +32,7 @@ from enumerate_and_relax import (
 from run_md import MDRunSpec, run_md
 from analyze_trajectory import analyze
 from report import StabilityReport, write_summary_table
-from progress import info, test_progress_bar
+from progress import info, loop_progress_bar, test_progress_bar
 
 
 @dataclass
@@ -94,21 +94,23 @@ def run(config):
 
     header("Phase 3: relax each doped configuration + formation energies")
     configurations = []
-    for candidate in candidates:
-        label = f"site{candidate.site_index}"
-        relaxed = relax_doped(
-            pristine_final, candidate.site_index, config.dopant, config.target_element,
-            chgnet, output_dir=config.relaxed_dir, label=label,
-            force=config.force_recompute,
-        )
-        e_f = formation_energy(
-            relaxed.final_energy_eV,
-            pristine_energy,
-            mu_removed=mus[config.target_element],
-            mu_dopant=mus[config.dopant],
-        )
-        info(f"  [{label}] E_f = {e_f:+.4f} eV")
-        configurations.append((candidate, relaxed, e_f))
+    with loop_progress_bar(len(candidates), "Phase 3 doped relaxations") as bar:
+        for candidate in candidates:
+            label = f"site{candidate.site_index}"
+            relaxed = relax_doped(
+                pristine_final, candidate.site_index, config.dopant, config.target_element,
+                chgnet, output_dir=config.relaxed_dir, label=label,
+                force=config.force_recompute,
+            )
+            e_f = formation_energy(
+                relaxed.final_energy_eV,
+                pristine_energy,
+                mu_removed=mus[config.target_element],
+                mu_dopant=mus[config.dopant],
+            )
+            info(f"  [{label}] E_f = {e_f:+.4f} eV")
+            configurations.append((candidate, relaxed, e_f))
+            bar.update(1)
 
     configurations.sort(key=lambda x: x[2])
 
