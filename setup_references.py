@@ -49,10 +49,33 @@ def _ca_fcc():
     )
 
 
+def _na_bcc():
+    a = 4.225
+    return Structure(
+        Lattice.cubic(a),
+        ["Na", "Na"],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+    )
+
+
+def _mn_bcc():
+    # BCC Mn used as a computationally tractable reference.
+    # True ground state is alpha-Mn (58-atom complex cell); this simpler
+    # cell gives a consistent reference within CHGNet's energy frame.
+    a = 2.911
+    return Structure(
+        Lattice.cubic(a),
+        ["Mn", "Mn"],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+    )
+
+
 REFERENCE_BUILDERS = {
     "Al": _al_fcc,
     "Co": _co_hcp,
     "Ca": _ca_fcc,
+    "Na": _na_bcc,
+    "Mn": _mn_bcc,
 }
 
 

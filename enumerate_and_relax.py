@@ -198,5 +198,102 @@ def relax_doped(supercell, site_index, dopant, target_element, chgnet, output_di
     )
 
 
-def formation_energy(doped_energy, pristine_energy, mu_removed, mu_dopant):
-    return doped_energy - pristine_energy + mu_removed - mu_dopant
+def formation_energy(doped_energy, pristine_energy, mu_removed_list, mu_dopant):
+    """
+    E_f = E(doped) - E(pristine) + sum(mu of every removed atom) - mu(dopant)
+
+    mu_removed_list accepts either a single float (backward compat) or a
+    list of floats covering the substituted site atom plus any
+    charge-compensation atoms removed from the supercell.
+    """
+    if isinstance(mu_removed_list, (int, float)):
+        mu_removed_list = [mu_removed_list]
+    return doped_energy - pristine_energy + sum(mu_removed_list) - mu_dopant
+
+
+def relax_doped_compensated(
+    supercell,
+    site_index,
+    dopant,
+    target_element,
+    chgnet,
+    mismatch,
+    compensation_ref="Na",
+    output_dir="relaxed_structures",
+    label=None,
+    force=False,
+):
+    """
+    Build a charge-compensated doped supercell, relax it, and cache the result.
+    Returns (RelaxedConfiguration, compensation_applied, comp_warnings).
+    """
+    from charge_utils import build_compensated_supercell
+
+    label = label or f"site{site_index}"
+    formula = supercell.composition.reduced_formula
+    tag = "comp" if mismatch != 0 else "iso"
+    cif_path, meta_path = _doped_paths(output_dir, formula, dopant, target_element, f"{label}_{tag}")
+
+    if not force and cif_path.exists() and meta_path.exists():
+        try:
+            meta = json.loads(meta_path.read_text())
+            final = Structure.from_file(str(cif_path))
+            comp_applied = meta.get("compensation_applied", False)
+            print(
+                f"  [cached][{label}] E = {meta['energy_eV']:.4f} eV  "
+                f"comp={comp_applied}  coord = {meta['coordination']}"
+            )
+            return (
+                RelaxedConfiguration(
+                    site_index=int(meta["site_index"]),
+                    dopant=dopant,
+                    target_element=target_element,
+                    final_structure=final,
+                    final_energy_eV=float(meta["energy_eV"]),
+                    relaxed_space_group=meta["space_group"],
+                    nn_distances_A=[float(d) for d in meta["nn_distances_A"]],
+                    coordination_number=int(meta["coordination"]),
+                ),
+                comp_applied,
+                meta.get("comp_warnings", []),
+            )
+        except Exception as exc:
+            print(f"  warning: compensated cache unreadable for {label} ({exc}); recomputing")
+
+    doped, comp_applied, comp_warnings = build_compensated_supercell(
+        supercell, site_index, dopant, mismatch, compensation_ref
+    )
+
+    final, energy = relax(doped, chgnet)
+    sg = "{} ({})".format(*final.get_space_group_info())
+    distances, coord = neighbor_info(final, site_index)
+    cif_path.parent.mkdir(parents=True, exist_ok=True)
+    final.to(filename=str(cif_path))
+    meta_path.write_text(json.dumps({
+        "site_index": int(site_index),
+        "energy_eV": float(energy),
+        "space_group": sg,
+        "coordination": int(coord),
+        "nn_distances_A": [float(d) for d in distances],
+        "compensation_applied": comp_applied,
+        "comp_warnings": comp_warnings,
+    }, indent=2))
+    mean_d = sum(distances) / len(distances) if distances else 0
+    print(
+        f"  [{label}] E = {energy:.4f} eV  SG = {sg}  "
+        f"coord({dopant}) = {coord}  mean d = {mean_d:.3f} A  comp={comp_applied}  -> {cif_path}"
+    )
+    return (
+        RelaxedConfiguration(
+            site_index=site_index,
+            dopant=dopant,
+            target_element=target_element,
+            final_structure=final,
+            final_energy_eV=energy,
+            relaxed_space_group=sg,
+            nn_distances_A=distances,
+            coordination_number=coord,
+        ),
+        comp_applied,
+        comp_warnings,
+    )

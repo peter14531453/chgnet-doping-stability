@@ -70,6 +70,10 @@ class StabilityReport:
     md_space_group: str | None = None
     md_mean_nn_distance_A: float | None = None
 
+    charge_mismatch: int | None = None
+    compensation_applied: bool = False
+    compensation_description: str = ""
+
     notes: list[str] = field(default_factory=list)
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
 
@@ -170,6 +174,10 @@ class StabilityReport:
             f"  Doping:         {self.dopant} -> {self.target_site_element} "
             f"(site index {self.site_index})"
         )
+        if self.charge_mismatch is not None:
+            mismatch_str = f"{self.charge_mismatch:+d}" if self.charge_mismatch != 0 else "0 (isovalent)"
+            print(f"  Charge mismatch:{mismatch_str}")
+            print(f"  Compensation:   {self.compensation_description or 'none'}")
         print()
 
         print("--- Phase 3: Formation energy ----------------------------------------------")
