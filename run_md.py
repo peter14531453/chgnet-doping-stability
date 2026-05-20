@@ -26,8 +26,8 @@ from chgnet.model.dynamics import MolecularDynamics
 class MDRunSpec:
     temperature_C: float = 250.0
     timestep_fs: float = 2.0
-    equilibration_steps: int = 2500
-    production_steps: int = 25000
+    equilibration_steps: int = 1250
+    production_steps: int = 12500
     loginterval: int = 10
     output_dir: str = "md_runs"
 

@@ -39,7 +39,13 @@ from enumerate_and_relax import (
 )
 from run_md import MDRunSpec, run_md
 from analyze_trajectory import analyze
-from report import StabilityReport, write_summary_table
+from report import (
+    StabilityReport,
+    site_report_stem,
+    run_report_stem,
+    write_final_report,
+    write_summary_table,
+)
 from progress import info, loop_progress_bar, test_progress_bar
 
 
@@ -191,8 +197,8 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
         md_spec=MDRunSpec(
             temperature_C=250.0,
             timestep_fs=2.0,
-            equilibration_steps=2500,
-            production_steps=25000,
+            equilibration_steps=1250,
+            production_steps=12500,
             loginterval=10,
         ),
     )
@@ -361,8 +367,11 @@ def run(config):
         rank_within_target = cfg["candidate_rank_within_target"]
 
         do_md = config.run_md and rank_within_target < config.md_top_n
-        test_name = (
-            f"{config.dopant}@{target_element}_site{candidate.site_index}"
+        test_name = site_report_stem(
+            config.host_formula,
+            config.dopant,
+            target_element,
+            candidate.site_index,
         )
         header(f"Test: {test_name}  (run_md={do_md})")
 
@@ -437,9 +446,19 @@ def run(config):
 
     _cross_site_summary(reports)
 
-    summary_path = Path(config.reports_dir) / "summary.csv"
+    stem = run_report_stem(config.host_formula, config.dopant)
+    summary_path = Path(config.reports_dir) / f"{stem}_summary.csv"
+    final_path = Path(config.reports_dir) / f"{stem}_final.json"
     write_summary_table(reports, summary_path)
+    write_final_report(
+        reports,
+        final_path,
+        host_formula=config.host_formula,
+        dopant=config.dopant,
+        target_elements=config.target_elements,
+    )
     info(f"Wrote summary -> {summary_path}")
+    info(f"Wrote final report -> {final_path}")
     return reports
 
 

@@ -32,7 +32,7 @@ EF_THRESHOLD_OK = 1.0             # eV — overall PASS/FAIL boundary
 
 # MSD slope: a dopant oscillating around one site has a slope near zero.
 # Above this threshold we call it "migrating". 0.005 A^2/ps corresponds
-# to roughly one bond-length hop over the entire 50 ps production run.
+# to roughly one bond-length hop over the entire production run (~25 ps default).
 MSD_PLATEAU_SLOPE_A2_PER_PS = 0.005
 
 # Coordination tolerance: how many neighbours (within cutoff_A) the dopant
@@ -53,6 +53,21 @@ def _tag(passed):
     if passed is None:
         return "[ SKIP ]"
     return "[ PASS ]" if passed else "[ FAIL ]"
+
+
+def site_report_stem(
+    host_formula: str,
+    dopant: str,
+    target_site_element: str,
+    site_index: int,
+) -> str:
+    """Basename for per-site outputs: host, dopant, site layer, and site index."""
+    return f"{host_formula}_{dopant}@{target_site_element}_site{site_index}"
+
+
+def run_report_stem(host_formula: str, dopant: str) -> str:
+    """Basename for run-level summary and final report files."""
+    return f"{host_formula}_{dopant}"
 
 
 @dataclass
@@ -326,7 +341,9 @@ def write_summary_table(reports, path):
     """Write a CSV-style summary across multiple reports."""
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     header = [
-        "test_name",
+        "host",
+        "dopant",
+        "dopant_site",
         "site_index",
         "E_f_eV",
         "relaxed_SG",
@@ -341,7 +358,9 @@ def write_summary_table(reports, path):
         f.write(",".join(header) + "\n")
         for r in reports:
             row = [
-                r.test_name,
+                r.host_formula,
+                r.dopant,
+                r.target_site_element,
                 str(r.site_index),
                 _fmt(r.formation_energy_eV, "{:.4f}"),
                 r.relaxed_space_group or "",
@@ -353,3 +372,38 @@ def write_summary_table(reports, path):
                 r.verdict,
             ]
             f.write(",".join(row) + "\n")
+
+
+def write_final_report(
+    reports,
+    path,
+    host_formula: str,
+    dopant: str,
+    target_elements: list[str],
+):
+    """Save aggregated run results (all sites) as JSON."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    ordered = sorted(reports, key=lambda r: r.formation_energy_eV)
+    best = ordered[0] if ordered else None
+    per_layer: dict[str, dict] = {}
+    for r in reports:
+        layer = r.target_site_element
+        if layer not in per_layer or r.formation_energy_eV < per_layer[layer]["formation_energy_eV"]:
+            per_layer[layer] = {
+                "test_name": r.test_name,
+                "site_index": r.site_index,
+                "formation_energy_eV": r.formation_energy_eV,
+                "verdict": r.verdict,
+            }
+    payload = {
+        "host_formula": host_formula,
+        "dopant": dopant,
+        "target_elements": target_elements,
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "n_tests": len(reports),
+        "best_overall": best.to_dict() if best else None,
+        "best_per_layer": per_layer,
+        "reports": [r.to_dict() for r in reports],
+    }
+    with open(path, "w") as f:
+        json.dump(payload, f, indent=2)

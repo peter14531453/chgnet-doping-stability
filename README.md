@@ -62,7 +62,7 @@ picks up where it stopped.
 | 3. Doped relax | `relaxed_structures/<host>_<dopant>@<elem>_siteI.cif` + `.json` |
 | 4. MD | `md_runs/<test>/md.traj` + `md.complete.json` marker |
 | 5. Analysis | `analysis/<test>/analysis.json` (plus msd.csv, rdf.csv, coordination.csv) |
-| 6. Report | `reports/<test>.json` |
+| 6. Report | `reports/<host>_<dopant>@<site>_siteI.json`, `<host>_<dopant>_summary.csv`, `<host>_<dopant>_final.json` |
 
 **MD additionally supports mid-run resume.** If a previous run was killed
 partway through the trajectory, the next run reads the existing `md.traj`,
@@ -94,7 +94,7 @@ primitive_cells/       Input CIF files (NaCoO2.cif, KCoO2.cif)
 relaxed_structures/    Pristine + doped relaxed CIFs + sidecar JSON (output)
 md_runs/               Per-test MD trajectories + completion markers (output)
 analysis/              Per-test MSD/coordination/RDF CSVs + analysis.json (output)
-reports/               Per-test JSON reports + summary.csv (output)
+reports/               Per-site JSON, run summary CSV, and final JSON (output)
 ```
 
 ## Installation
@@ -176,6 +176,6 @@ To change MD temperature, timestep, or step counts, edit `config_from_args` or
   primary signal.
 - **Single concentration per run.** Re-run with a larger supercell to probe
   dilution effects.
-- **MD timescales are short.** The default 50 ps production captures local
+- **MD timescales are short.** The default 25 ps production captures local
   dynamics but not slow diffusion -- treat a non-plateauing MSD as evidence
   that the site is unstable, not as a quantitative diffusion measurement.
