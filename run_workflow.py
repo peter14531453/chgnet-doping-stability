@@ -47,6 +47,7 @@ from report import (
     write_summary_table,
 )
 from progress import info, loop_progress_bar, test_progress_bar
+from generate_pdf_report import generate_pdf_for_run
 
 
 HOSTS: dict[str, dict[str, str]] = {
@@ -459,6 +460,15 @@ def run(config):
     )
     info(f"Wrote summary -> {summary_path}")
     info(f"Wrote final report -> {final_path}")
+
+    pdf_path = generate_pdf_for_run(
+        reports,
+        reports_dir=config.reports_dir,
+        host_formula=config.host_formula,
+        dopant=config.dopant,
+        temperature_C=config.md_spec.temperature_C,
+    )
+    info(f"Wrote PDF report  -> {pdf_path}")
     return reports
 
 
