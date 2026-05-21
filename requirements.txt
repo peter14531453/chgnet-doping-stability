@@ -6,3 +6,4 @@ scipy>=1.10
 torch>=2.4.1
 tqdm>=4.66
 colorama>=0.4.6
+fpdf2>=2.7
