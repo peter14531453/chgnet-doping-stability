@@ -1,0 +1,13 @@
+{
+  "msd_slope_A2_per_ps": -0.0016882799849089218,
+  "msd_final_A2": 0.07816603333135337,
+  "max_displacement_A": 0.6931854568839801,
+  "coordination_min": 4,
+  "coordination_max": 7,
+  "coordination_mean": 5.7018385291766585,
+  "mean_nn_distance_A": 2.285901794614146,
+  "volume_change_pct": 0.0,
+  "space_group": "P1 (1)",
+  "n_frames": 1251,
+  "output_dir": "analysis/NaCoO2_Ca@Na_site0"
+}

@@ -1,0 +1,2 @@
+host,dopant,dopant_site,site_index,E_f_eV,relaxed_SG,coord_relaxed,MSD_slope,MSD_final,vol_change_pct,MD_SG,verdict
+KCoO2,Ni,Co,16,0.5915,Pm (6),5,0.0031,0.083,0.00,P1 (1),STRUCTURAL COLLAPSE

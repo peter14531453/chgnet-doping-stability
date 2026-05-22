@@ -1,0 +1,115 @@
+{
+  "host_formula": "KCoO2",
+  "dopant": "Ni",
+  "target_elements": [
+    "Co"
+  ],
+  "timestamp": "2026-05-20T17:44:19",
+  "n_tests": 1,
+  "best_overall": {
+    "test_name": "KCoO2_Ni@Co_site16",
+    "host_formula": "KCoO2",
+    "dopant": "Ni",
+    "target_site_element": "Co",
+    "site_index": 16,
+    "supercell_size": 2,
+    "formation_energy_eV": 0.5914697647094727,
+    "pristine_energy_eV": -588.21240234375,
+    "doped_energy_eV": -586.3598022460938,
+    "mu_dopant_eV": -11.942841529846191,
+    "mu_removed_eV": -13.203971862792969,
+    "relaxed_space_group": "Pm (6)",
+    "relaxed_coordination": 5,
+    "relaxed_mean_nn_distance_A": 2.014569626894141,
+    "relaxed_nn_distances_A": [
+      1.8025097288150014,
+      2.0524898603932664,
+      2.05368068481961,
+      2.0820835183250894,
+      2.0820843421177364
+    ],
+    "md_temperature_K": 523.15,
+    "md_duration_ps": 25.0,
+    "md_msd_slope_A2_per_ps": 0.003147468943358059,
+    "md_msd_final_A2": 0.08271774245375839,
+    "md_max_displacement_A": 0.8584794994478466,
+    "md_coordination_min": 3,
+    "md_coordination_max": 6,
+    "md_coordination_mean": 4.686650679456434,
+    "md_volume_change_pct": 0.0,
+    "md_space_group": "P1 (1)",
+    "md_mean_nn_distance_A": 1.9956101450291424,
+    "charge_mismatch": 0,
+    "compensation_applied": false,
+    "compensation_description": "isovalent \u2014 no charge compensation needed",
+    "notes": [
+      "Symmetric multiplicity: 16",
+      "Analysis outputs in analysis/KCoO2_Ni@Co_site16"
+    ],
+    "timestamp": "2026-05-20T16:56:19",
+    "verdict": "STRUCTURAL COLLAPSE",
+    "ef_pass": true,
+    "msd_pass": true,
+    "coordination_pass": false,
+    "lattice_pass": true,
+    "space_group_preserved": false
+  },
+  "best_per_layer": {
+    "Co": {
+      "test_name": "KCoO2_Ni@Co_site16",
+      "site_index": 16,
+      "formation_energy_eV": 0.5914697647094727,
+      "verdict": "STRUCTURAL COLLAPSE"
+    }
+  },
+  "reports": [
+    {
+      "test_name": "KCoO2_Ni@Co_site16",
+      "host_formula": "KCoO2",
+      "dopant": "Ni",
+      "target_site_element": "Co",
+      "site_index": 16,
+      "supercell_size": 2,
+      "formation_energy_eV": 0.5914697647094727,
+      "pristine_energy_eV": -588.21240234375,
+      "doped_energy_eV": -586.3598022460938,
+      "mu_dopant_eV": -11.942841529846191,
+      "mu_removed_eV": -13.203971862792969,
+      "relaxed_space_group": "Pm (6)",
+      "relaxed_coordination": 5,
+      "relaxed_mean_nn_distance_A": 2.014569626894141,
+      "relaxed_nn_distances_A": [
+        1.8025097288150014,
+        2.0524898603932664,
+        2.05368068481961,
+        2.0820835183250894,
+        2.0820843421177364
+      ],
+      "md_temperature_K": 523.15,
+      "md_duration_ps": 25.0,
+      "md_msd_slope_A2_per_ps": 0.003147468943358059,
+      "md_msd_final_A2": 0.08271774245375839,
+      "md_max_displacement_A": 0.8584794994478466,
+      "md_coordination_min": 3,
+      "md_coordination_max": 6,
+      "md_coordination_mean": 4.686650679456434,
+      "md_volume_change_pct": 0.0,
+      "md_space_group": "P1 (1)",
+      "md_mean_nn_distance_A": 1.9956101450291424,
+      "charge_mismatch": 0,
+      "compensation_applied": false,
+      "compensation_description": "isovalent \u2014 no charge compensation needed",
+      "notes": [
+        "Symmetric multiplicity: 16",
+        "Analysis outputs in analysis/KCoO2_Ni@Co_site16"
+      ],
+      "timestamp": "2026-05-20T16:56:19",
+      "verdict": "STRUCTURAL COLLAPSE",
+      "ef_pass": true,
+      "msd_pass": true,
+      "coordination_pass": false,
+      "lattice_pass": true,
+      "space_group_preserved": false
+    }
+  ]
+}

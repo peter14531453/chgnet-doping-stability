@@ -1,0 +1,13 @@
+{
+  "msd_slope_A2_per_ps": 6.156339634804598e-05,
+  "msd_final_A2": 0.035866732600550844,
+  "max_displacement_A": 0.7975721892460292,
+  "coordination_min": 6,
+  "coordination_max": 6,
+  "coordination_mean": 6.0,
+  "mean_nn_distance_A": 1.9373259680180726,
+  "volume_change_pct": 0.0,
+  "space_group": "P1 (1)",
+  "n_frames": 1251,
+  "output_dir": "analysis/NaCoO2_Mn@Co_site24"
+}

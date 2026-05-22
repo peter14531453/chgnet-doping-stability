@@ -1,0 +1,2 @@
+test_name,site_index,E_f_eV,relaxed_SG,coord_relaxed,MSD_slope,MSD_final,vol_change_pct,MD_SG,verdict
+Mn@Co_site16,16,-2.5260,Pm (6),5,-0.0007,0.221,0.00,P1 (1),STABLE

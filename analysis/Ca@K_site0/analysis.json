@@ -1,0 +1,13 @@
+{
+  "msd_slope_A2_per_ps": 2.4671788403446387e-05,
+  "msd_final_A2": 0.15296425417024725,
+  "max_displacement_A": 0.8759784412291344,
+  "coordination_min": 1,
+  "coordination_max": 6,
+  "coordination_mean": 3.8676529388244703,
+  "mean_nn_distance_A": 2.3269021208223046,
+  "volume_change_pct": 0.0,
+  "space_group": "P1 (1)",
+  "n_frames": 2501,
+  "output_dir": "analysis/Ca@K_site0"
+}

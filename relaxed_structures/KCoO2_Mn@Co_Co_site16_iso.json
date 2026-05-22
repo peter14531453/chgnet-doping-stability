@@ -1,0 +1,15 @@
+{
+  "site_index": 16,
+  "energy_eV": -592.2251586914062,
+  "space_group": "Pm (6)",
+  "coordination": 5,
+  "nn_distances_A": [
+    1.7312096416447864,
+    1.8796023490065594,
+    1.8799978841458167,
+    1.8799992606643936,
+    1.8825138244977777
+  ],
+  "compensation_applied": false,
+  "comp_warnings": []
+}

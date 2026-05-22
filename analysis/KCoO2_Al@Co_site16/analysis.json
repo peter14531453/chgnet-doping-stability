@@ -1,0 +1,13 @@
+{
+  "msd_slope_A2_per_ps": 0.0004666706842262695,
+  "msd_final_A2": 0.2979961352487953,
+  "max_displacement_A": 1.3279976692567967,
+  "coordination_min": 4,
+  "coordination_max": 5,
+  "coordination_mean": 4.087130295763389,
+  "mean_nn_distance_A": 1.7883980699180086,
+  "volume_change_pct": 0.0,
+  "space_group": "P1 (1)",
+  "n_frames": 1251,
+  "output_dir": "analysis/KCoO2_Al@Co_site16"
+}

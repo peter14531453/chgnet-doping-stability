@@ -1,0 +1,18 @@
+{
+  "site_index": 0,
+  "energy_eV": -847.0225524902344,
+  "space_group": "P-3m1 (164)",
+  "coordination": 6,
+  "nn_distances_A": [
+    2.295622958447239,
+    2.2956241970281557,
+    2.2956272987185886,
+    2.2956292630083417,
+    2.2956297275259767,
+    2.2956355632871306
+  ],
+  "compensation_applied": false,
+  "comp_warnings": [
+    "Charge surplus (+1) cannot be modelled in CHGNet. Running single substitution without compensation. E_f is approximate."
+  ]
+}

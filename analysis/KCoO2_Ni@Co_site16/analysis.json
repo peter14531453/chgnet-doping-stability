@@ -1,0 +1,13 @@
+{
+  "msd_slope_A2_per_ps": 0.003147468943358059,
+  "msd_final_A2": 0.08271774245375839,
+  "max_displacement_A": 0.8584794994478466,
+  "coordination_min": 3,
+  "coordination_max": 6,
+  "coordination_mean": 4.686650679456434,
+  "mean_nn_distance_A": 1.9956101450291424,
+  "volume_change_pct": 0.0,
+  "space_group": "P1 (1)",
+  "n_frames": 1251,
+  "output_dir": "analysis/KCoO2_Ni@Co_site16"
+}

@@ -1,0 +1,2 @@
+host,dopant,dopant_site,site_index,E_f_eV,relaxed_SG,coord_relaxed,MSD_slope,MSD_final,vol_change_pct,MD_SG,verdict
+NaCoO2,Al,Co,24,-4.7821,P-3m1 (164),6,0.0008,3.105,0.00,P1 (1),STABLE

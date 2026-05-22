@@ -1,0 +1,13 @@
+{
+  "msd_slope_A2_per_ps": 0.00042263039426652043,
+  "msd_final_A2": 0.12413036325859012,
+  "max_displacement_A": 0.786821967786405,
+  "coordination_min": 4,
+  "coordination_max": 5,
+  "coordination_mean": 4.022790883646541,
+  "mean_nn_distance_A": 1.7786156664498032,
+  "volume_change_pct": 0.0,
+  "space_group": "P1 (1)",
+  "n_frames": 2501,
+  "output_dir": "analysis/Al@Co_site16"
+}
