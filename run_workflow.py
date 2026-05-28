@@ -22,8 +22,10 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
+import torch
 from chgnet.model.model import CHGNet
 
 from charge_utils import (
@@ -48,6 +50,7 @@ from report import (
 )
 from progress import info, loop_progress_bar, test_progress_bar
 from generate_pdf_report import generate_pdf_for_run
+from generate_md_report import generate_md_for_run
 
 
 HOSTS: dict[str, dict[str, str]] = {
@@ -65,14 +68,15 @@ HOSTS: dict[str, dict[str, str]] = {
     },
 }
 
-CO_SUBSTITUTION_DOPANTS = frozenset({"Al", "Ni", "Mn"})
-ALKALI_SUBSTITUTION_DOPANTS = frozenset({"Mn", "Ca"})
-
 DOPANT_OXIDATION_STATES: dict[str, int] = {
     "Al": 3,
     "Ni": 3,
     "Mn": 3,
     "Ca": 2,
+    "Cr": 3,
+    "Fe": 3,
+    "Zn": 2,
+    "Mg": 2,
 }
 
 
@@ -111,22 +115,6 @@ def _resolve_target_elements(host: str, sites: list[str] | None) -> list[str]:
     return unique
 
 
-def _validate_dopant_for_targets(dopant: str, target_elements: list[str]) -> None:
-    for target in target_elements:
-        if target == "Co" and dopant not in CO_SUBSTITUTION_DOPANTS:
-            allowed = ", ".join(sorted(CO_SUBSTITUTION_DOPANTS))
-            raise ValueError(
-                f"Dopant '{dopant}' is not valid for Co substitution. "
-                f"Choose one of: {allowed}."
-            )
-        if target in ("Na", "K") and dopant not in ALKALI_SUBSTITUTION_DOPANTS:
-            allowed = ", ".join(sorted(ALKALI_SUBSTITUTION_DOPANTS))
-            raise ValueError(
-                f"Dopant '{dopant}' is not valid for alkali-site substitution. "
-                f"Choose one of: {allowed}."
-            )
-
-
 def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="CHGNet doping-stability workflow for layered ACoO2 cathodes.",
@@ -141,8 +129,8 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--dopant",
         required=True,
         help=(
-            "Dopant element. For Co sites: Al, Ni, or Mn. "
-            "For alkali sites: Mn or Ca."
+            "Dopant element symbol (e.g. Al, Mn, Ca). "
+            "Tested on all specified sites; charge mismatch is handled automatically."
         ),
     )
     parser.add_argument(
@@ -177,7 +165,6 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
 
     host_cfg = HOSTS[args.host]
     target_elements = _resolve_target_elements(args.host, args.sites)
-    _validate_dopant_for_targets(dopant, target_elements)
 
     primitive_path = Path(host_cfg["primitive_cell_file"])
     if not primitive_path.is_file():
@@ -186,6 +173,7 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
             f"Add a CIF for {args.host} under primitive_cells/."
         )
 
+    run_date = date.today().isoformat()
     return WorkflowConfig(
         primitive_cell_file=host_cfg["primitive_cell_file"],
         host_formula=host_cfg["host_formula"],
@@ -195,6 +183,7 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
         dopant_oxidation_state=DOPANT_OXIDATION_STATES[dopant],
         run_md=not args.no_md,
         force_recompute=args.force_recompute,
+        reports_dir=f"reports/{run_date}",
         md_spec=MDRunSpec(
             temperature_C=250.0,
             timestep_fs=2.0,
@@ -279,6 +268,8 @@ def run(config):
 
     header("Loading CHGNet")
     chgnet = CHGNet.load(model_name=config.chgnet_model)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    info(f"  Device: {device}" + (f"  ({torch.cuda.get_device_name(0)})" if device == "cuda" else " (no GPU found)"))
 
     all_ref_elements = sorted({config.dopant, config.compensation_ref} | set(config.target_elements))
     header(f"Phase 1: chemical potentials — {', '.join(all_ref_elements)}")
@@ -469,6 +460,15 @@ def run(config):
         temperature_C=config.md_spec.temperature_C,
     )
     info(f"Wrote PDF report  -> {pdf_path}")
+
+    md_path = generate_md_for_run(
+        reports,
+        reports_dir=config.reports_dir,
+        host_formula=config.host_formula,
+        dopant=config.dopant,
+        temperature_C=config.md_spec.temperature_C,
+    )
+    info(f"Wrote MD report   -> {md_path}")
     return reports
 
 
