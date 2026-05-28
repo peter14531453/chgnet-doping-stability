@@ -103,38 +103,34 @@ def build_compensated_supercell(
 
     Strategy
     --------
-    mismatch < 0  (dopant brings less positive charge, e.g. Ca2+ → Co3+)
-        Remove |mismatch| Na atoms from the supercell so the net charge
-        of the defect complex is zero. We pick the Na atoms *furthest*
-        from the dopant site first — large separation minimises the
-        Coulomb interaction between the dopant and the vacancy, giving
-        a better approximation to the dilute (isolated defect) limit.
-        The E_f formula is updated in enumerate_and_relax.formation_energy
-        to include the +mu(Na) term for each removed Na.
+    mismatch > 0  (dopant brings MORE positive charge, e.g. Mn4+ → Co3+, Ca2+ → Na+)
+        Remove |mismatch| Na/K atoms from the supercell to restore charge
+        neutrality. This physically corresponds to Na loss during synthesis
+        or electrochemical de-sodiation. The E_f formula adds +mu(Na) for
+        each removed atom (handled in enumerate_and_relax).
 
-    mismatch == 0  (isovalent, e.g. Mn3+ → Co3+)
+    mismatch == 0  (isovalent, e.g. Al3+ → Co3+, Mn3+ → Co3+)
         Plain substitution, no structural modification. E_f is reliable.
 
-    mismatch > 0  (dopant brings more positive charge, e.g. Mn3+ → Na+)
-        Compensation would require adding electrons, which is not possible
-        in a charge-neutral MLIP. Run plain substitution and flag E_f as
-        approximate. In practice, positive mismatch cases in layered oxides
-        are compensated by Co3+→Co4+ oxidation; this cannot be modelled
-        without a charge-aware potential.
+    mismatch < 0  (dopant brings LESS positive charge, e.g. Mg2+/Zn2+ → Co3+)
+        Compensation requires adding Na interstitials or oxidising Co3+→Co4+,
+        neither of which is possible in a charge-neutral MLIP. Run plain
+        substitution and flag E_f as approximate.
     """
     doped = structure.copy()
     doped.replace(site_index, dopant)
     warnings: list[str] = []
 
-    if mismatch >= 0:
-        if mismatch > 0:
+    if mismatch <= 0:
+        if mismatch < 0:
             warnings.append(
-                f"Charge surplus (+{mismatch}) cannot be modelled in CHGNet. "
+                f"Charge deficit ({mismatch:+d}) cannot be compensated in CHGNet "
+                f"(would require adding {compensation_ref} interstitials or oxidising Co). "
                 "Running single substitution without compensation. E_f is approximate."
             )
         return doped, False, warnings
 
-    n_remove = abs(mismatch)
+    n_remove = mismatch
     ref_indices = [
         i for i, s in enumerate(doped) if s.specie.symbol == compensation_ref
     ]

@@ -152,6 +152,16 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Ignore cached relaxations, MD, and analysis outputs.",
     )
+    parser.add_argument(
+        "--oxidation-state",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Override the dopant oxidation state (e.g. --oxidation-state 4 for Mn⁴⁺). "
+            "Defaults to the value in DOPANT_OXIDATION_STATES."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -180,7 +190,7 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
         target_elements=target_elements,
         dopant=dopant,
         compensation_ref=host_cfg["compensation_ref"],
-        dopant_oxidation_state=DOPANT_OXIDATION_STATES[dopant],
+        dopant_oxidation_state=args.oxidation_state if args.oxidation_state is not None else DOPANT_OXIDATION_STATES[dopant],
         run_md=not args.no_md,
         force_recompute=args.force_recompute,
         reports_dir=f"reports/{run_date}",
