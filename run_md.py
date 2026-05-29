@@ -16,7 +16,6 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from ase.io import read as ase_read
 from ase.io.trajectory import Trajectory
 from pymatgen.io.ase import AseAtomsAdaptor
 from chgnet.model.dynamics import MolecularDynamics
@@ -50,22 +49,57 @@ def _completion_info(spec, T, traj_path, log_path):
     }
 
 
-def _read_partial(traj_path):
-    if not traj_path.exists():
+def _read_traj_frames(path):
+    """Read every readable frame from a trajectory, tolerating a truncated final
+    frame (a hard kill mid-write can leave the last frame incomplete). Returns
+    the complete frames rather than discarding the whole file on error."""
+    path = Path(path)
+    if not path.exists():
         return []
+    frames = []
     try:
-        return ase_read(str(traj_path), index=":")
+        with Trajectory(str(path), "r") as traj:
+            for atoms in traj:
+                frames.append(atoms)
     except Exception as exc:
-        print(f"  warning: trajectory at {traj_path} unreadable ({exc}); restarting from scratch")
-        traj_path.unlink()
-        return []
+        print(f"  note: {path.name} read stopped after {len(frames)} frame(s) ({exc})")
+    return frames
 
 
 def _concat_trajectories(traj_paths, output_path):
     with Trajectory(str(output_path), "w") as out_traj:
         for tp in traj_paths:
-            for atoms in ase_read(str(tp), index=":"):
+            for atoms in _read_traj_frames(tp):
                 out_traj.write(atoms)
+
+
+def _fold_segment(traj_path, segment_traj):
+    """Merge a segment trajectory into the canonical md.traj, then delete the
+    segment.
+
+    This is what makes a killed MD resumable: frames are written to the segment
+    file every `loginterval` steps during the run, so folding the segment in on
+    the next start (instead of discarding it) preserves all completed MD steps.
+    No-op when the segment is missing or empty.
+    """
+    traj_path = Path(traj_path)
+    segment_traj = Path(segment_traj)
+    if not segment_traj.exists():
+        return
+    seg_frames = _read_traj_frames(segment_traj)
+    if not seg_frames:
+        segment_traj.unlink()
+        return
+    if traj_path.exists():
+        backup = traj_path.with_suffix(".traj.prev")
+        traj_path.replace(backup)
+        _concat_trajectories([backup, segment_traj], traj_path)
+        backup.unlink()
+    else:
+        _concat_trajectories([segment_traj], traj_path)
+    if segment_traj.exists():
+        segment_traj.unlink()
+    print(f"  recovered {len(seg_frames)} MD frame(s) into {traj_path.name}")
 
 
 def run_md(structure, chgnet, label, spec=None, progress=None):
@@ -75,6 +109,7 @@ def run_md(structure, chgnet, label, spec=None, progress=None):
     traj_path = out_dir / "md.traj"
     log_path = out_dir / "md.log"
     complete_path = out_dir / "md.complete.json"
+    segment_traj = out_dir / "md_segment.traj"
 
     T = temperature_K(spec)
     total_steps = spec.equilibration_steps + spec.production_steps
@@ -86,7 +121,11 @@ def run_md(structure, chgnet, label, spec=None, progress=None):
             progress.md_complete()
         return info
 
-    existing_frames = _read_partial(traj_path)
+    # Recover a segment orphaned by a crash/kill BEFORE reading progress, so a
+    # killed MD resumes from its last checkpoint instead of restarting at zero.
+    _fold_segment(traj_path, segment_traj)
+
+    existing_frames = _read_traj_frames(traj_path)
     steps_already_done = len(existing_frames) * spec.loginterval
     steps_remaining = total_steps - steps_already_done
 
@@ -114,7 +153,7 @@ def run_md(structure, chgnet, label, spec=None, progress=None):
     if progress:
         progress.phase("md_setup")
 
-    segment_traj = out_dir / "md_segment.traj"
+    # Start a clean segment; any previous one was already folded into md.traj.
     if segment_traj.exists():
         segment_traj.unlink()
 
@@ -136,16 +175,8 @@ def run_md(structure, chgnet, label, spec=None, progress=None):
 
     md.run(steps_remaining)
 
-    if existing_frames:
-        backup_old = traj_path.with_suffix(".traj.prev")
-        traj_path.replace(backup_old)
-        _concat_trajectories([backup_old, segment_traj], traj_path)
-        backup_old.unlink()
-        segment_traj.unlink()
-    else:
-        if traj_path.exists():
-            traj_path.unlink()
-        segment_traj.replace(traj_path)
+    # Fold the freshly completed segment into the canonical trajectory.
+    _fold_segment(traj_path, segment_traj)
 
     complete_path.write_text(json.dumps(info, indent=2))
     if progress:

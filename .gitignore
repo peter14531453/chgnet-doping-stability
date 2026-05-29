@@ -17,6 +17,12 @@ references.json
 md_out.traj
 md_out.log
 
+# Batch runner runtime state + logs (per-machine, not source)
+batch_state.json
+batch_state*.json
+output.log
+nohup.out
+
 # Editors
 .vscode/
 .idea/
