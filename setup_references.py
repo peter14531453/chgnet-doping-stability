@@ -67,6 +67,28 @@ def _k_bcc():
     )
 
 
+def _li_bcc():
+    a = 3.510
+    return Structure(
+        Lattice.cubic(a),
+        ["Li", "Li"],
+        [[0, 0, 0], [0.5, 0.5, 0.5]],
+    )
+
+
+def _ga_fcc():
+    # alpha-Ga is orthorhombic (Cmce, 8-atom cell) and is not produced by
+    # ase.build.bulk. A simple fcc cell serves as a computationally tractable
+    # metallic reference; CHGNet relaxes it to a consistent per-atom energy
+    # (same rationale as _mn_bcc).
+    a = 4.510
+    return Structure(
+        Lattice.cubic(a),
+        ["Ga", "Ga", "Ga", "Ga"],
+        [[0, 0, 0], [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5]],
+    )
+
+
 def _ni_fcc():
     a = 3.524
     return Structure(
@@ -94,9 +116,44 @@ REFERENCE_BUILDERS = {
     "Ca": _ca_fcc,
     "Na": _na_bcc,
     "K": _k_bcc,
+    "Li": _li_bcc,
     "Ni": _ni_fcc,
     "Mn": _mn_bcc,
+    "Ga": _ga_fcc,
 }
+
+
+def _ase_bulk_reference(element):
+    """Build an elemental reference crystal via ASE's known reference states.
+
+    ase.build.bulk(element) returns the experimental ground-state crystal for
+    essentially every metal we screen, removing the need to hand-code a cell
+    per dopant. CHGNet then relaxes it to a per-atom chemical potential.
+    """
+    from ase.build import bulk
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    try:
+        atoms = bulk(element)
+    except Exception as exc:  # noqa: BLE001 - surface a clear, actionable error
+        raise KeyError(
+            f"No elemental reference available for '{element}'. "
+            "ase.build.bulk could not build it; add a builder to "
+            "REFERENCE_BUILDERS in setup_references.py."
+        ) from exc
+    return AseAtomsAdaptor.get_structure(atoms)
+
+
+def reference_structure(element):
+    """Return the elemental reference Structure for `element`.
+
+    Prefers a validated hand-coded builder (REFERENCE_BUILDERS); otherwise
+    falls back to ASE's reference states. This keeps existing mu values stable
+    while letting any database dopant be referenced automatically.
+    """
+    if element in REFERENCE_BUILDERS:
+        return REFERENCE_BUILDERS[element]()
+    return _ase_bulk_reference(element)
 
 
 def mu_from_structure(structure, target_element, chgnet, optimizer=None, fmax=0.01, steps=300):
@@ -128,12 +185,7 @@ def compute_references(
     optimizer = StructOptimizer(model=chgnet)
     mus = dict(existing or {})
     for element in elements:
-        if element not in REFERENCE_BUILDERS:
-            raise KeyError(
-                f"No built-in elemental reference for '{element}'. "
-                "Add a builder to REFERENCE_BUILDERS or pass a Structure to mu_from_structure."
-            )
-        structure = REFERENCE_BUILDERS[element]()
+        structure = reference_structure(element)
         mus[element] = float(mu_from_structure(structure, element, chgnet, optimizer=optimizer))
         print(f"  mu({element}) = {mus[element]:.4f} eV/atom")
     Path(save_path).write_text(json.dumps(mus, indent=2))

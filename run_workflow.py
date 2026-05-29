@@ -32,6 +32,7 @@ from charge_utils import (
     charge_mismatch as compute_charge_mismatch,
     describe_compensation,
 )
+from dopant_database import DOPANTS, get_dopant
 from setup_references import get_or_compute_references
 from enumerate_and_relax import (
     enumerate_sites,
@@ -59,24 +60,22 @@ HOSTS: dict[str, dict[str, str]] = {
         "host_formula": "NaCoO2",
         "compensation_ref": "Na",
         "alkali_site": "Na",
+        "alias": "NCO",
     },
     "KCoO2": {
         "primitive_cell_file": "primitive_cells/KCoO2.cif",
         "host_formula": "KCoO2",
         "compensation_ref": "K",
         "alkali_site": "K",
+        "alias": "KCO",
     },
-}
-
-DOPANT_OXIDATION_STATES: dict[str, int] = {
-    "Al": 3,
-    "Ni": 3,
-    "Mn": 3,
-    "Ca": 2,
-    "Cr": 3,
-    "Fe": 3,
-    "Zn": 2,
-    "Mg": 2,
+    "LiCoO2": {
+        "primitive_cell_file": "primitive_cells/LiCoO2.cif",
+        "host_formula": "LiCoO2",
+        "compensation_ref": "Li",
+        "alkali_site": "Li",
+        "alias": "LCO",
+    },
 }
 
 
@@ -95,7 +94,7 @@ def _resolve_target_elements(host: str, sites: list[str] | None) -> list[str]:
             resolved.append(alkali)
         elif token == "co":
             resolved.append("Co")
-        elif token in ("na", "k"):
+        elif token in ("na", "k", "li"):
             if token != alkali.lower():
                 raise ValueError(
                     f"Site '{site}' does not match host {host} "
@@ -159,7 +158,7 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         help=(
             "Override the dopant oxidation state (e.g. --oxidation-state 4 for Mn⁴⁺). "
-            "Defaults to the value in DOPANT_OXIDATION_STATES."
+            "Defaults to the typical value in the dopant database."
         ),
     )
     return parser.parse_args(argv)
@@ -167,10 +166,10 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
     dopant = args.dopant.strip().capitalize()
-    if dopant not in DOPANT_OXIDATION_STATES:
+    if dopant not in DOPANTS:
         raise ValueError(
             f"Unknown dopant '{args.dopant}'. "
-            f"Supported: {', '.join(sorted(DOPANT_OXIDATION_STATES))}."
+            f"Supported: {', '.join(sorted(DOPANTS))}."
         )
 
     host_cfg = HOSTS[args.host]
@@ -190,7 +189,7 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
         target_elements=target_elements,
         dopant=dopant,
         compensation_ref=host_cfg["compensation_ref"],
-        dopant_oxidation_state=args.oxidation_state if args.oxidation_state is not None else DOPANT_OXIDATION_STATES[dopant],
+        dopant_oxidation_state=args.oxidation_state if args.oxidation_state is not None else get_dopant(dopant).oxidation_state,
         run_md=not args.no_md,
         force_recompute=args.force_recompute,
         reports_dir=f"reports/{run_date}",
@@ -273,13 +272,19 @@ def _cross_site_summary(reports):
              f"(delta E_f = {ordered[1].formation_energy_eV - ordered[0].formation_energy_eV:+.4f} eV) <<<")
 
 
-def run(config):
+def run(config, chgnet=None):
+    """Run the full workflow for one (host, dopant) configuration.
+
+    Pass a preloaded `chgnet` model to avoid reloading it per run (batch mode);
+    if omitted, the model is loaded here so single CLI runs work unchanged.
+    """
     Path(config.reports_dir).mkdir(parents=True, exist_ok=True)
 
-    header("Loading CHGNet")
-    chgnet = CHGNet.load(model_name=config.chgnet_model)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    info(f"  Device: {device}" + (f"  ({torch.cuda.get_device_name(0)})" if device == "cuda" else " (no GPU found)"))
+    if chgnet is None:
+        header("Loading CHGNet")
+        chgnet = CHGNet.load(model_name=config.chgnet_model)
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        info(f"  Device: {device}" + (f"  ({torch.cuda.get_device_name(0)})" if device == "cuda" else " (no GPU found)"))
 
     all_ref_elements = sorted({config.dopant, config.compensation_ref} | set(config.target_elements))
     header(f"Phase 1: chemical potentials — {', '.join(all_ref_elements)}")

@@ -28,18 +28,17 @@ from __future__ import annotations
 
 import numpy as np
 
-OXIDATION_STATES: dict[str, int] = {
-    # Alkali metals
+from dopant_database import DOPANTS
+
+# Oxidation states for host-lattice and anion species that are NOT dopants.
+# Dopant oxidation states live in the dopant database (single source of truth);
+# this table covers the alkali sites, the Co host site, and common anions so
+# charge_mismatch can be computed for any (dopant, host-site) pair.
+_BASE_OXIDATION_STATES: dict[str, int] = {
+    # Alkali sites
     "Li": 1, "Na": 1, "K": 1, "Rb": 1, "Cs": 1,
-    # Alkaline earth
-    "Mg": 2, "Ca": 2, "Sr": 2, "Ba": 2,
-    # Group 13
-    "Al": 3, "Ga": 3, "In": 3,
-    # 3d transition metals (typical oxidation state in layered oxides)
-    "Ti": 4, "V": 3, "Cr": 3, "Mn": 3, "Fe": 3,
-    "Co": 3, "Ni": 3, "Cu": 2, "Zn": 2,
-    # 4d / 5d (common in cathodes)
-    "Nb": 5, "Mo": 4, "W": 4, "Ru": 4,
+    # Host transition metal
+    "Co": 3,
     # Anions
     "O": -2, "F": -1, "Cl": -1, "S": -2,
 }
@@ -48,12 +47,15 @@ OXIDATION_STATES: dict[str, int] = {
 def get_oxidation_state(element: str, override: int | None = None) -> int:
     if override is not None:
         return override
-    if element not in OXIDATION_STATES:
-        raise KeyError(
-            f"No default oxidation state for '{element}'. "
-            "Set dopant_oxidation_state= or target_oxidation_state= in WorkflowConfig."
-        )
-    return OXIDATION_STATES[element]
+    if element in DOPANTS:
+        return DOPANTS[element].oxidation_state
+    if element in _BASE_OXIDATION_STATES:
+        return _BASE_OXIDATION_STATES[element]
+    raise KeyError(
+        f"No default oxidation state for '{element}'. "
+        "Add it to the dopant database or set "
+        "dopant_oxidation_state=/target_oxidation_state= in WorkflowConfig."
+    )
 
 
 def charge_mismatch(

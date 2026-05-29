@@ -5,10 +5,14 @@ for determining whether a dopant element is **thermodynamically stable**,
 **kinetically dopable**, and **where it sits** in a target crystal at a
 specified temperature.
 
-The workflow targets layered **ACoO2** cathodes (**NaCoO2** or **KCoO2**)
-with command-line control over host lattice, dopant, and substitution layer.
-Additional settings (supercell size, MD temperature, step counts) live in
-`WorkflowConfig` inside [run_workflow.py](run_workflow.py).
+The workflow targets layered **ACoO2** cathodes (**NaCoO2**, **KCoO2**, or
+**LiCoO2**) with command-line control over host lattice, dopant, and
+substitution layer. Additional settings (supercell size, MD temperature, step
+counts) live in `WorkflowConfig` inside [run_workflow.py](run_workflow.py).
+
+For exploring many dopants at once, an **interactive batch mode**
+([interactive.py](interactive.py)) lets you queue a mix of hosts and dopants in
+one session (see *Interactive batch mode* below).
 
 ## What it does
 
@@ -122,24 +126,30 @@ python run_workflow.py --dopant Al --host NaCoO2 --sites Co
 
 | Flag | Description |
 |------|-------------|
-| `--host` | Host lattice: `NaCoO2` (default) or `KCoO2` |
-| `--dopant` | Dopant element (see table below) |
+| `--host` | Host lattice: `NaCoO2` (default), `KCoO2`, or `LiCoO2` |
+| `--dopant` | Dopant element from the dopant database (see below) |
 | `--sites` | One or more substitution layers (see below). Default: `Co` and the host alkali |
+| `--oxidation-state` | Override the dopant's default oxidation state (e.g. `--oxidation-state 4`) |
 | `--no-md` | Skip MD and trajectory analysis (relaxation + E_f only) |
 | `--force-recompute` | Ignore cached relaxations, MD, and analysis |
 
 ### Dopants and substitution layers
 
-| Layer (`--sites`) | Valid dopants (`--dopant`) |
-|-------------------|----------------------------|
-| `Co` | `Al`, `Ni`, `Mn` |
-| Alkali (`Na` for NaCoO2, `K` for KCoO2, or `alkali`) | `Mn`, `Ca` |
+Supported dopants live in [dopant_database.py](dopant_database.py) — ~25 curated
+metals (alkaline-earth, post-transition, and 3d/4d/5d transition metals) with
+their typical layered-oxide oxidation state. Each dopant is automatically tested
+on whichever site(s) you pick; the charge mismatch versus that site is handled
+for you (alkali vacancies compensate a charge *deficit*; a charge *surplus*, e.g.
+Ti⁴⁺/Nb⁵⁺ on Co³⁺, runs uncompensated with an "E_f approximate" flag).
 
 For `--sites`, each token is one of:
 
 - `Co` — transition-metal layer
-- `alkali` — Na (NaCoO2) or K (KCoO2), depending on `--host`
-- `Na` or `K` — explicit alkali symbol (must match the host)
+- `alkali` — `Na` (NaCoO2), `K` (KCoO2), or `Li` (LiCoO2), depending on `--host`
+- `Na`, `K`, or `Li` — explicit alkali symbol (must match the host)
+
+Running both layers (the default) ranks the dopant's site preference by
+formation energy.
 
 ### Examples
 
@@ -160,11 +170,40 @@ python run_workflow.py --host KCoO2 --dopant Ni --sites Co K --no-md
 python run_workflow.py --help
 ```
 
-Charge compensation uses **Na** for NaCoO2 and **K** for KCoO2 automatically.
-Oxidation states for the dopant are set from the CLI choice (e.g. Mn3+, Ca2+).
+Charge compensation uses **Na** for NaCoO2, **K** for KCoO2, and **Li** for
+LiCoO2 automatically. The dopant oxidation state comes from the database
+(override with `--oxidation-state`).
 
 To change MD temperature, timestep, or step counts, edit `config_from_args` or
 `WorkflowConfig` in [run_workflow.py](run_workflow.py).
+
+## Interactive batch mode
+
+For screening many dopants across hosts in one go:
+
+```powershell
+conda activate chgnet
+python interactive.py
+```
+
+You'll be guided through:
+
+1. **Pick hosts** — NaCoO2 (NCO), KCoO2 (KCO), and/or LiCoO2 (LCO).
+2. **Pick dopants per host** — a grouped checklist (all pre-selected). Press
+   **Enter** to take all, or:
+   - `Space` toggle one
+   - `Ctrl+A` select all · `Alt+D` deselect all · `Ctrl+R` invert
+3. **Pick sites per host** — Co and the host alkali, both pre-selected.
+4. **MD?** — off by default (fast relaxation + formation-energy screening).
+
+Because choices are made per host, you can queue mixed trials in a single
+session — e.g. *Al/Mn on LCO*, *Ti on KCO*, and *Sb/Sr/Al/Mn on NCO*. Before
+anything runs you get a pre-flight summary (with charge-surplus warnings), and
+when it finishes a **combined ranking** of every run by formation energy plus a
+`reports/<date>/batch_summary.csv`.
+
+CHGNet is loaded once and shared across all queued runs; per-phase caching means
+re-running a session skips work already done.
 
 ## Caveats
 
