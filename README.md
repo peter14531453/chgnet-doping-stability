@@ -205,6 +205,34 @@ when it finishes a **combined ranking** of every run by formation energy plus a
 CHGNet is loaded once and shared across all queued runs; per-phase caching means
 re-running a session skips work already done.
 
+## SLURM cluster (per-job submission with resume)
+
+For a cluster with a hard wall-time limit (e.g. 4 h) where each workflow run is
+a separate job, [submit_slurm_jobs.py](submit_slurm_jobs.py) manages submission
+and resume:
+
+```bash
+source activate chgnet
+python submit_slurm_jobs.py --status     # classify jobs, submit nothing
+python submit_slurm_jobs.py --dry-run    # write .sbatch files + print, no sbatch
+python submit_slurm_jobs.py              # write + submit the pending jobs
+```
+
+It scans the caches and labels each job FINISHED or, if not, which phase it would
+resume from (pristine relax / doped relax / MD with the timestep reached /
+analysis+report), prints that, writes one `.sbatch` per pending job (customised
+`--output`, `--job-name`, and the `run_workflow.py` command), and submits with
+`sbatch`. Jobs already in the SLURM queue (matched by name) are skipped.
+
+**MD resume on restart.** A run killed mid-MD by the wall-time limit resumes from
+its last checkpoint automatically: frames are written every `loginterval` steps,
+and `run_md` folds the partial segment back into the trajectory on the next run
+(see `_fold_segment`). Re-submitting the same `run_workflow.py` command continues
+the MD from where it stopped rather than restarting it.
+
+Edit the dopant/host lists at the top of `submit_slurm_jobs.py` to change the job
+set. All jobs use `run_workflow.py`'s default MD temperature (250 C).
+
 ## Caveats
 
 - **CHGNet is charge-neutral.** Isovalent substitutions (Al3+/Co3+) are
