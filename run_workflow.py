@@ -161,6 +161,17 @@ def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
             "Defaults to the typical value in the dopant database."
         ),
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=250.0,
+        metavar="C",
+        help=(
+            "MD temperature in Celsius (default: 250). MD, analysis, and report "
+            "outputs are namespaced by temperature (md_runs/T###, analysis/T###, "
+            "reports/<date>/T###) so different temperatures never share a cache."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -183,6 +194,10 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
         )
 
     run_date = date.today().isoformat()
+    # Namespace MD/analysis/report outputs by temperature so the same dopant run
+    # at two temperatures does not collide on a shared cache. Relaxations are
+    # temperature-independent and stay in the shared relaxed_structures/ dir.
+    temp_tag = f"T{int(round(args.temperature))}"
     return WorkflowConfig(
         primitive_cell_file=host_cfg["primitive_cell_file"],
         host_formula=host_cfg["host_formula"],
@@ -192,13 +207,15 @@ def config_from_args(args: argparse.Namespace) -> WorkflowConfig:
         dopant_oxidation_state=args.oxidation_state if args.oxidation_state is not None else get_dopant(dopant).oxidation_state,
         run_md=not args.no_md,
         force_recompute=args.force_recompute,
-        reports_dir=f"reports/{run_date}",
+        analysis_dir=f"analysis/{temp_tag}",
+        reports_dir=f"reports/{run_date}/{temp_tag}",
         md_spec=MDRunSpec(
-            temperature_C=250.0,
+            temperature_C=args.temperature,
             timestep_fs=2.0,
             equilibration_steps=1250,
             production_steps=12500,
             loginterval=10,
+            output_dir=f"md_runs/{temp_tag}",
         ),
     )
 

@@ -63,34 +63,45 @@ module load anaconda/2023-Mar/3
 export OMP_NUM_THREADS=1
 
 source activate chgnet
-python run_workflow.py --host {host} --dopant {dopant} --sites {sites}
+python run_workflow.py --host {host} --dopant {dopant} --sites {sites} --temperature {temp}
 """
 
 # ── Job list (edit me) ────────────────────────────────────────────────────────
 # Each entry is ONE sbatch submission = one run_workflow.py call.
 #   sites: list of --sites tokens; ["Co", "alkali"] tests both layers.
-# Keep (host, dopant) unique — finished-detection keys on {host}_{dopant}.
+#   temp:  MD temperature in C (one job per temperature).
+# Keep (host, dopant, temp) unique — detection keys on those.
 NCO_KCO_DOPANTS = ["Cr", "Fe", "Ca", "Al", "Ni", "Zn", "Mn", "Mg"]
+NCO_KCO_TEMPS = [200, 300]
 LCO_DOPANTS = [
     "Al", "Ca", "Sc", "Ti", "Cr", "Mn", "Fe", "Ni", "Cu", "Zn",
     "Sr", "Y", "Nb", "Sn", "Sb", "Ba", "La",
 ]
+LCO_TEMPS = [320, 350]
 
 
 def default_jobs() -> list[dict]:
     jobs: list[dict] = []
     for host in ("NaCoO2", "KCoO2"):
         for dopant in NCO_KCO_DOPANTS:
-            jobs.append({"host": host, "dopant": dopant, "sites": ["Co", "alkali"]})
+            for temp in NCO_KCO_TEMPS:
+                jobs.append({"host": host, "dopant": dopant,
+                             "sites": ["Co", "alkali"], "temp": temp})
     for dopant in LCO_DOPANTS:
-        jobs.append({"host": "LiCoO2", "dopant": dopant, "sites": ["Co", "alkali"]})
+        for temp in LCO_TEMPS:
+            jobs.append({"host": "LiCoO2", "dopant": dopant,
+                         "sites": ["Co", "alkali"], "temp": temp})
     return jobs
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def temp_tag(job: dict) -> str:
+    return f"T{int(job['temp'])}"
+
+
 def job_name(job: dict) -> str:
-    return f"chgnet_{job['host']}_{job['dopant']}_{'_'.join(job['sites'])}"
+    return f"chgnet_{job['host']}_{job['dopant']}_{'_'.join(job['sites'])}_{temp_tag(job)}"
 
 
 def resolve_targets(host: str, sites: list[str]) -> list[str]:
@@ -133,21 +144,24 @@ def _md_steps_done(md_subdir: Path) -> int:
     return frames * MD_LOGINTERVAL
 
 
-def _target_md_dirs(host: str, dopant: str, target: str) -> list[Path]:
-    return [Path(p) for p in glob(str(MD_DIR / f"{host}_{dopant}@{target}_site*"))]
+def _target_md_dirs(host: str, dopant: str, target: str, tag: str) -> list[Path]:
+    # MD/analysis are namespaced by temperature (md_runs/T###); relaxations are not.
+    return [Path(p) for p in glob(str(MD_DIR / tag / f"{host}_{dopant}@{target}_site*"))]
 
 
 def _target_relaxed(host: str, dopant: str, target: str) -> bool:
     return bool(glob(str(RELAXED_DIR / f"{host}_{dopant}@{target}_*site*.cif")))
 
 
-def _final_report_exists(host: str, dopant: str) -> bool:
-    return bool(glob(str(REPORTS_DIR / "**" / f"{host}_{dopant}_final.json"), recursive=True))
+def _final_report_exists(host: str, dopant: str, tag: str) -> bool:
+    return bool(glob(str(REPORTS_DIR / "**" / tag / f"{host}_{dopant}_final.json"),
+                     recursive=True))
 
 
 def job_status(job: dict) -> dict:
     """Classify a job. Returns {finished: bool, phase: str}."""
     host, dopant = job["host"], job["dopant"]
+    tag = temp_tag(job)
     targets = resolve_targets(host, job["sites"])
 
     if not (RELAXED_DIR / f"{host}_pristine_2.cif").exists():
@@ -158,7 +172,7 @@ def job_status(job: dict) -> dict:
     md_start: list[str] = []
 
     for t in targets:
-        dirs = _target_md_dirs(host, dopant, t)
+        dirs = _target_md_dirs(host, dopant, t, tag)
         if any((d / "md.complete.json").exists() for d in dirs):
             continue  # MD done for this target
         if not _target_relaxed(host, dopant, t):
@@ -179,7 +193,7 @@ def job_status(job: dict) -> dict:
                 "phase": f"Phase 4 (MD resume {t}: ~{steps}/{MD_TOTAL_STEPS} steps, {pct:.0f}%)"}
     if md_start:
         return {"finished": False, "phase": f"Phase 4 (MD start: {', '.join(md_start)})"}
-    if not _final_report_exists(host, dopant):
+    if not _final_report_exists(host, dopant, tag):
         return {"finished": False, "phase": "Phase 5-6 (analysis + report)"}
     return {"finished": True, "phase": "complete"}
 
@@ -205,6 +219,7 @@ def write_sbatch(job: dict) -> Path:
         host=job["host"],
         dopant=job["dopant"],
         sites=" ".join(job["sites"]),
+        temp=job["temp"],
     )
     path = SBATCH_DIR / f"{name}.sbatch"
     path.write_text(content)
@@ -234,13 +249,15 @@ def main(argv=None) -> int:
     print(f"\nFINISHED ({len(finished)}):")
     if finished:
         for job, _ in finished:
-            print(f"  [done] {job['host']} {job['dopant']} ({'+'.join(job['sites'])})")
+            print(f"  [done] {job['host']} {job['dopant']} "
+                  f"({'+'.join(job['sites'])}) @ {job['temp']} C")
     else:
         print("  (none yet)")
 
     print(f"\nTO SUBMIT ({len(pending)}):")
     for job, st in pending:
-        print(f"  [{st['phase']}]  {job['host']} {job['dopant']} ({'+'.join(job['sites'])})")
+        print(f"  [{st['phase']}]  {job['host']} {job['dopant']} "
+              f"({'+'.join(job['sites'])}) @ {job['temp']} C")
 
     if args.status:
         print("\n--status: nothing submitted.")

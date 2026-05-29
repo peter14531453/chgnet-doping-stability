@@ -130,6 +130,7 @@ python run_workflow.py --dopant Al --host NaCoO2 --sites Co
 | `--dopant` | Dopant element from the dopant database (see below) |
 | `--sites` | One or more substitution layers (see below). Default: `Co` and the host alkali |
 | `--oxidation-state` | Override the dopant's default oxidation state (e.g. `--oxidation-state 4`) |
+| `--temperature` | MD temperature in Celsius (default 250). Outputs are namespaced by temperature (`md_runs/T###`, `analysis/T###`, `reports/<date>/T###`) so different temperatures never share a cache |
 | `--no-md` | Skip MD and trajectory analysis (relaxation + E_f only) |
 | `--force-recompute` | Ignore cached relaxations, MD, and analysis |
 
@@ -194,7 +195,10 @@ You'll be guided through:
    - `Space` toggle one
    - `Ctrl+A` select all · `Alt+D` deselect all · `Ctrl+R` invert
 3. **Pick sites per host** — Co and the host alkali, both pre-selected.
-4. **MD?** — off by default (fast relaxation + formation-energy screening).
+4. **MD temperature(s) per host** — enter one or more temperatures in Celsius
+   (e.g. `200, 300`); each dopant runs once per temperature. Leave blank to skip
+   MD for that host (relaxation + E_f screening only). Outputs are namespaced by
+   temperature so the same dopant at two temperatures never shares a cache.
 
 Because choices are made per host, you can queue mixed trials in a single
 session — e.g. *Al/Mn on LCO*, *Ti on KCO*, and *Sb/Sr/Al/Mn on NCO*. Before
@@ -230,8 +234,9 @@ and `run_md` folds the partial segment back into the trajectory on the next run
 (see `_fold_segment`). Re-submitting the same `run_workflow.py` command continues
 the MD from where it stopped rather than restarting it.
 
-Edit the dopant/host lists at the top of `submit_slurm_jobs.py` to change the job
-set. All jobs use `run_workflow.py`'s default MD temperature (250 C).
+Edit the dopant/host/temperature lists at the top of `submit_slurm_jobs.py` to
+change the job set — one sbatch job is created per (host, dopant, temperature),
+and each generated command passes `--temperature` to `run_workflow.py`.
 
 ## Caveats
 

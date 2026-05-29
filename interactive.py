@@ -12,7 +12,9 @@ Flow
 2. For each chosen host, pick its dopants (all pre-selected; Ctrl+A select all,
    Alt+D deselect all, Ctrl+R invert) and which sites to substitute (Co and the
    host alkali, both pre-selected).
-3. Choose whether to run MD (off by default -- relaxation + E_f screening).
+3. For each host, choose the MD temperature(s) in Celsius (e.g. "200, 300").
+   Leave blank to skip MD for that host (relaxation + E_f screening only).
+   Each selected dopant runs once per chosen temperature.
 4. Review the queued runs, then confirm.
 
 Run with:
@@ -20,6 +22,7 @@ Run with:
 """
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -52,10 +55,16 @@ class Job:
     host_key: str
     dopant: str
     sites: list[str]
+    temperature: float = 250.0  # MD temperature in C (ignored when run_md is False)
+    run_md: bool = True
 
     @property
     def alias(self) -> str:
         return HOSTS[self.host_key]["alias"]
+
+    @property
+    def temp_tag(self) -> str:
+        return f"T{int(round(self.temperature))}"
 
 
 def _host_label(host_key: str) -> str:
@@ -127,7 +136,33 @@ def select_sites(host_key: str) -> list[str]:
     ).execute()
 
 
-def build_jobs() -> tuple[list[Job], bool]:
+def _parse_temps(text: str) -> list[float]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    return [float(p) for p in re.split(r"[,\s]+", text) if p]
+
+
+def select_temperatures(host_key: str) -> list[float]:
+    """Ask for this host's MD temperature(s). Blank = no MD (relaxation only)."""
+    def _validate(s: str) -> bool:
+        try:
+            _parse_temps(s)
+            return True
+        except ValueError:
+            return False
+
+    return inquirer.text(
+        message=f"MD temperature(s) for {_host_label(host_key)} in C "
+                f"(comma-separated; blank = no MD, relaxation only):",
+        default="",
+        validate=_validate,
+        invalid_message="Enter numbers like '200, 300', or leave blank to skip MD.",
+        filter=_parse_temps,
+    ).execute()
+
+
+def build_jobs() -> list[Job]:
     hosts = select_hosts()
     jobs: list[Job] = []
     for host_key in hosts:
@@ -135,15 +170,17 @@ def build_jobs() -> tuple[list[Job], bool]:
         info(f"══ Configure {_host_label(host_key)} ══")
         dopants = select_dopants(host_key)
         sites = select_sites(host_key)
-        for dopant in dopants:
-            jobs.append(Job(host_key=host_key, dopant=dopant, sites=sites))
-
-    info()
-    run_md = inquirer.confirm(
-        message="Run finite-temperature MD? (slow; off = relaxation + E_f screening)",
-        default=False,
-    ).execute()
-    return jobs, run_md
+        temps = select_temperatures(host_key)
+        if temps:
+            for dopant in dopants:
+                for temp in temps:
+                    jobs.append(Job(host_key=host_key, dopant=dopant, sites=sites,
+                                    temperature=temp, run_md=True))
+        else:
+            for dopant in dopants:
+                jobs.append(Job(host_key=host_key, dopant=dopant, sites=sites,
+                                run_md=False))
+    return jobs
 
 
 def _positive_mismatch_sites(job: Job) -> list[tuple[str, int]]:
@@ -156,25 +193,31 @@ def _positive_mismatch_sites(job: Job) -> list[tuple[str, int]]:
     return flagged
 
 
-def preflight_summary(jobs: list[Job], run_md: bool) -> None:
+def preflight_summary(jobs: list[Job]) -> None:
     info()
     info("#" * 70)
-    info(f"#  QUEUED RUNS — {len(jobs)} (host × dopant), MD: {'ON' if run_md else 'off'}")
+    info(f"#  QUEUED RUNS — {len(jobs)} (host × dopant × temperature)")
     info("#" * 70)
 
     by_host: dict[str, list[Job]] = {}
     for job in jobs:
         by_host.setdefault(job.host_key, []).append(job)
 
-    warnings: list[str] = []
+    warnings: set[str] = set()
     for host_key, host_jobs in by_host.items():
         sites = host_jobs[0].sites
-        dopants = [j.dopant for j in host_jobs]
-        info(f"  {_host_label(host_key):<16} {', '.join(dopants)}")
-        info(f"  {'':<16} sites: {', '.join(sites)}")
+        dopants = sorted({j.dopant for j in host_jobs})
+        temps = sorted({j.temperature for j in host_jobs if j.run_md})
+        info(f"  {_host_label(host_key)}")
+        info(f"    dopants: {', '.join(dopants)}")
+        info(f"    sites:   {', '.join(sites)}")
+        if temps:
+            info(f"    MD temps: {', '.join(f'{t:g} C' for t in temps)}")
+        else:
+            info("    MD: off (relaxation + E_f only)")
         for job in host_jobs:
             for site, mismatch in _positive_mismatch_sites(job):
-                warnings.append(
+                warnings.add(
                     f"{job.dopant} (+{DOPANTS[job.dopant].oxidation_state}) on "
                     f"{site} site of {job.alias}: +{mismatch} mismatch — "
                     f"uncompensated, E_f approximate"
@@ -183,24 +226,17 @@ def preflight_summary(jobs: list[Job], run_md: bool) -> None:
     if warnings:
         info()
         info("  ⚠ Charge-surplus cases (CHGNet cannot model the compensating electron):")
-        for w in warnings:
+        for w in sorted(warnings):
             info(f"    - {w}")
     info("#" * 70)
 
 
-def run_batch(jobs: list[Job], run_md: bool) -> None:
+def run_batch(jobs: list[Job]) -> None:
     from chgnet.model.model import CHGNet
     import torch
 
     run_date = date.today().isoformat()
-    reports_dir = f"reports/{run_date}"
-    md_spec = MDRunSpec(
-        temperature_C=250.0,
-        timestep_fs=2.0,
-        equilibration_steps=1250,
-        production_steps=12500,
-        loginterval=10,
-    )
+    base_reports = f"reports/{run_date}"
 
     info()
     info("Loading CHGNet (shared across all queued runs)…")
@@ -211,10 +247,23 @@ def run_batch(jobs: list[Job], run_md: bool) -> None:
     all_reports = []
     for i, job in enumerate(jobs, start=1):
         host_cfg = HOSTS[job.host_key]
+        # MD/analysis/report outputs are namespaced by temperature so two
+        # temperatures of the same dopant never collide on a shared cache;
+        # relaxations (temperature-independent) stay in relaxed_structures/.
+        if job.run_md:
+            tag = job.temp_tag
+            analysis_dir, reports_dir, md_output = (
+                f"analysis/{tag}", f"{base_reports}/{tag}", f"md_runs/{tag}",
+            )
+            md_desc = f"{job.temperature:g} C"
+        else:
+            analysis_dir, reports_dir, md_output = "analysis", base_reports, "md_runs"
+            md_desc = "no MD"
+
         info()
         info("=" * 70)
         info(f"  RUN {i}/{len(jobs)}: {job.dopant} on {_host_label(job.host_key)}  "
-             f"sites={', '.join(job.sites)}")
+             f"sites={', '.join(job.sites)}  ({md_desc})")
         info("=" * 70)
         config = WorkflowConfig(
             primitive_cell_file=host_cfg["primitive_cell_file"],
@@ -223,14 +272,22 @@ def run_batch(jobs: list[Job], run_md: bool) -> None:
             dopant=job.dopant,
             compensation_ref=host_cfg["compensation_ref"],
             dopant_oxidation_state=DOPANTS[job.dopant].oxidation_state,
-            run_md=run_md,
+            run_md=job.run_md,
+            analysis_dir=analysis_dir,
             reports_dir=reports_dir,
-            md_spec=md_spec,
+            md_spec=MDRunSpec(
+                temperature_C=job.temperature,
+                timestep_fs=2.0,
+                equilibration_steps=1250,
+                production_steps=12500,
+                loginterval=10,
+                output_dir=md_output,
+            ),
         )
         reports = run(config, chgnet=chgnet)
         all_reports.extend(reports)
 
-    _final_ranking(all_reports, reports_dir)
+    _final_ranking(all_reports, base_reports)
 
 
 def _final_ranking(reports, reports_dir: str) -> None:
@@ -245,11 +302,12 @@ def _final_ranking(reports, reports_dir: str) -> None:
     info("#" * 70)
     info("#  COMBINED RANKING (all queued runs, lowest E_f first)")
     info("#" * 70)
-    info(f"  {'Host':<10} {'Dopant':>6} {'Site':>5} {'E_f (eV)':>10}  Verdict")
-    info("  " + "-" * 66)
+    info(f"  {'Host':<10} {'Dopant':>6} {'Site':>5} {'T(C)':>6} {'E_f (eV)':>10}  Verdict")
+    info("  " + "-" * 72)
     for r in sorted(reports, key=lambda x: x.formation_energy_eV):
+        tc = f"{r.md_temperature_K - 273.15:.0f}" if r.md_temperature_K else "-"
         info(f"  {r.host_formula:<10} {r.dopant:>6} {r.target_site_element:>5} "
-             f"{r.formation_energy_eV:>+10.4f}  {r.verdict}")
+             f"{tc:>6} {r.formation_energy_eV:>+10.4f}  {r.verdict}")
     info()
     info(f"  Combined summary CSV -> {summary_path}")
 
@@ -257,7 +315,7 @@ def _final_ranking(reports, reports_dir: str) -> None:
 def main() -> int:
     info("CHGNet doping-stability — interactive batch setup")
     try:
-        jobs, run_md = build_jobs()
+        jobs = build_jobs()
     except KeyboardInterrupt:
         info("\nCancelled.")
         return 130
@@ -266,7 +324,7 @@ def main() -> int:
         info("No runs queued.")
         return 0
 
-    preflight_summary(jobs, run_md)
+    preflight_summary(jobs)
 
     try:
         start = inquirer.confirm(message="Start these runs now?", default=True).execute()
@@ -277,7 +335,7 @@ def main() -> int:
         info("Aborted — nothing run.")
         return 0
 
-    run_batch(jobs, run_md)
+    run_batch(jobs)
     return 0
 
 
