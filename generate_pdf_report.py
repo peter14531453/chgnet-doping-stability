@@ -25,6 +25,34 @@ from pathlib import Path
 from fpdf import FPDF
 
 # ---------------------------------------------------------------------------
+# Unicode → ASCII sanitizer
+# Helvetica is a core PDF font that only covers Latin-1. Any Unicode character
+# outside that range (em-dash, curly quotes, etc.) raises a character-range
+# error. Replace common offenders with plain ASCII equivalents before any text
+# is passed to fpdf.
+# ---------------------------------------------------------------------------
+
+def _safe(text: str) -> str:
+    return (
+        str(text)
+        .replace("—", "--")   # em dash —
+        .replace("–", "-")    # en dash –
+        .replace("’", "'")    # right single quotation mark '
+        .replace("‘", "'")    # left single quotation mark '
+        .replace("“", '"')    # left double quotation mark "
+        .replace("”", '"')    # right double quotation mark "
+        .replace("²", "^2")   # superscript 2  ²
+        .replace("°", " deg") # degree sign °
+        .replace("μ", "u")    # mu µ
+        .replace("→", "->")   # arrow →
+        .replace("é", "e")    # é
+        .replace("è", "e")    # è
+        .replace("à", "a")    # à
+        .encode("latin-1", errors="replace").decode("latin-1")
+    )
+
+
+# ---------------------------------------------------------------------------
 # Thresholds — must match report.py
 # ---------------------------------------------------------------------------
 EF_THRESHOLD_OK = 1.0
@@ -242,9 +270,15 @@ def _site_preference_conclusion(reports: list[dict]) -> str:
 class ReportPDF(FPDF):
     def __init__(self, title: str):
         super().__init__()
-        self._doc_title = title
+        self._doc_title = _safe(title)
         self.set_auto_page_break(auto=True, margin=18)
         self.set_margins(left=20, top=20, right=20)
+
+    def cell(self, w=0, h=0, txt="", *args, **kwargs):
+        super().cell(w, h, _safe(txt), *args, **kwargs)
+
+    def multi_cell(self, w, h, txt="", *args, **kwargs):
+        super().multi_cell(w, h, _safe(txt), *args, **kwargs)
 
     def header(self):
         self.set_font("Helvetica", "B", 9)
