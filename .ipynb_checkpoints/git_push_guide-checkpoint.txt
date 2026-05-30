@@ -1,0 +1,54 @@
+===== HOW TO PUSH CODE FROM JUPYTER NOTEBOOK TERMINAL =====
+
+EVERY TIME YOU WANT TO PUSH:
+------------------------------
+git add .
+git commit -m "Describe what you changed here"
+git push
+
+
+IF GIT ASKS FOR USERNAME/PASSWORD:
+------------------------------------
+Username: peter14531453
+Password: [paste your Personal Access Token here]
+
+Note: The password field will look blank when you paste — that is normal, just press Enter.
+
+
+IF YOU GET "Authentication failed" ERROR:
+------------------------------------------
+Run this to clear the old saved token:
+
+git credential reject <<EOF
+protocol=https
+host=github.com
+EOF
+
+Then run git push again and enter your credentials.
+
+
+TO MAKE GIT REMEMBER YOUR TOKEN (so you don't retype it):
+-----------------------------------------------------------
+git config --global credential.helper store
+git push
+(enter username + token once — it will be saved after this)
+
+
+TO CHECK IF YOU ARE CONNECTED TO GITHUB:
+-----------------------------------------
+git remote -v
+git ls-remote origin
+
+
+TO CHECK IF TOKEN IS SAVED:
+-----------------------------
+cat ~/.git-credentials
+
+
+WHERE TO GET A NEW TOKEN (if old one expires or is revoked):
+-------------------------------------------------------------
+GitHub -> Settings -> Developer settings -> Personal access tokens -> Tokens (classic) -> Generate new token
+- Check only the "repo" scope
+- Copy the token immediately (it won't be shown again)
+
+=============================================================

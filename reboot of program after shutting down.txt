@@ -10,8 +10,82 @@ STEP 2 — Check if job is still running
 ----------------------------------------------------------
 ps aux | grep run_batch
 
-  >> See "python run_batch.py" in output = STILL RUNNING
-  >> Only see the grep line              = STOPPED
+WHAT THIS COMMAND DOES
+----------------------
+"ps aux"            = list EVERY program currently running on the computer.
+"|"                 = take that list and feed it into the next command.
+"grep run_batch"    = from that list, only show me lines that contain the
+                      words "run_batch".
+
+So the whole command means:
+   "Show me every running program whose name contains 'run_batch'."
+
+ ----------------------------------------------------------------------
+  IMPORTANT TRICK YOU MUST UNDERSTAND FIRST
+----------------------------------------------------------------------
+The "grep" command itself is a running program, and it literally has the
+words "run_batch" inside it (because you typed them). So grep will ALWAYS
+find ITSELF and show one line for itself.
+
+That one self-line is NOT your program. It is a fake-out. Learn to ignore it.
+
+How to recognize the grep self-line:
+   - It contains the word "grep" near the end.
+   - Example:  bw10   1367  0.0  0.0   6548  2164 pts/3  S+  02:53  0:00 grep run_batch
+                                                                          ^^^^^^^^^^^^^^^^^
+                                                                          says "grep run_batch"
+
+RULE OF THUMB:
+   - A line that ends in "grep run_batch"        --> IGNORE IT (it's the search itself)
+   - A line that ends in "python run_batch.py"   --> THAT is your real program
+
+
+======================================================================
+  CASE 1:  NOTHING IS RUNNING  (program is STOPPED / dead)
+======================================================================
+
+You will see ONLY the grep self-line, and nothing else:
+
+    bw10@jupyter-bw10:~/chgnet-doping-stability$ ps aux | grep run_batch
+    bw10   1367  0.0  0.0   6548  2164 pts/3   S+   02:53   0:00 grep run_batch
+    bw10@jupyter-bw10:~/chgnet-doping-stability$
+
+  Notice:
+   - Only ONE line came back.
+   - That one line ends in "grep run_batch".
+   - There is NO line ending in "python run_batch.py".
+
+  >>> CONCLUSION: The program is NOT running. It is stopped/dead.
+
+  (You might also see NO lines at all on some systems. That also means
+   NOT running.)
+
+
+======================================================================
+  CASE 2:  THE PROGRAM IS RUNNING  (working normally)
+======================================================================
+
+You will see TWO (or more) lines. One is the grep self-line (ignore it),
+and at least one OTHER line that ends in "python run_batch.py":
+
+    bw10@jupyter-bw10:~/chgnet-doping-stability$ ps aux | grep run_batch
+    bw10   2048  98.7  3.2 1582364 528104 pts/2  Rl   01:10  42:31 python run_batch.py
+    bw10   1367   0.0  0.0    6548   2164 pts/3  S+   02:53   0:00 grep run_batch
+    bw10@jupyter-bw10:~/chgnet-doping-stability$
+
+  Notice:
+   - There are TWO lines.
+   - One line ends in "python run_batch.py"   <-- THIS is your real program. RUNNING!
+   - The other ends in "grep run_batch"        <-- ignore, it's just the search.
+
+  Extra clues that confirm it is REALLY working (on the python line):
+   - The big number near the start (e.g. 98.7) = CPU %. A high number means
+     it is actively computing.
+   - The time near the end (e.g. 42:31) = how long it has been using the CPU.
+     If you run the command again later and this number got BIGGER, the
+     program is alive and working.
+
+  >>> CONCLUSION: The program IS running.
 
 
 STEP 3 — Check progress
