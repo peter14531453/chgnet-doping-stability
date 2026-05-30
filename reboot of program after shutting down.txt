@@ -1,0 +1,46 @@
+=======================================================
+  CHGNET JOB MONITOR & RESTART GUIDE
+
+STEP 1 — Navigate to project folder (always do this first)
+----------------------------------------------------------
+cd /home/bw10/chgnet-doping-stability
+
+
+STEP 2 — Check if job is still running
+----------------------------------------------------------
+ps aux | grep run_batch
+
+  >> See "python run_batch.py" in output = STILL RUNNING
+  >> Only see the grep line              = STOPPED
+
+
+STEP 3 — Check progress
+----------------------------------------------------------
+python run_batch.py --status
+
+
+IF JOB IS STOPPED — Restart it
+----------------------------------------------------------
+nohup python run_batch.py >> output.log 2>&1 &
+echo "PID: $!"
+sleep 20 && tail -30 output.log
+
+  >> "python run_batch.py" line confirms it started
+  >> Log output confirms it resumed from where it stopped
+
+=======================================================
+=======================================================
+=======================================================
+=======================================================
+---------------------------------------------------------
+When 24 hours passed and need to restart program that was shut down, do these step by step:
+
+1.  Check what the new code thinks is done/remaining (fast, no GPU):
+python run_batch.py --status
+
+2.  Restart the batch:
+nohup python run_batch.py >> output.log 2>&1 &
+echo "PID: $!"
+
+3.  Confirm it started cleanly:
+sleep 20 && tail -30 output.log
