@@ -1,0 +1,3 @@
+host,dopant,dopant_site,site_index,E_f_eV,relaxed_SG,coord_relaxed,MSD_slope,MSD_final,vol_change_pct,MD_SG,verdict
+KCoO2,Cr,Co,16,-3.4277,Pm (6),5,-0.0071,0.207,0.00,P1 (1),STABLE
+KCoO2,Cr,K,0,2.7847,P1 (1),5,0.0093,0.510,0.00,P1 (1),MIGRATION / UNFAVORABLE

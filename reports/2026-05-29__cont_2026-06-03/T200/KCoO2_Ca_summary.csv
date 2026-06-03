@@ -1,0 +1,3 @@
+host,dopant,dopant_site,site_index,E_f_eV,relaxed_SG,coord_relaxed,MSD_slope,MSD_final,vol_change_pct,MD_SG,verdict
+KCoO2,Ca,K,0,-3.2935,Cm (8),5,-0.0021,0.240,0.00,P1 (1),STRUCTURAL COLLAPSE
+KCoO2,Ca,Co,16,-2.9374,Pm (6),5,-0.0013,0.208,0.00,P1 (1),STRUCTURAL COLLAPSE

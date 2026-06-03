@@ -1,0 +1,3 @@
+host,dopant,dopant_site,site_index,E_f_eV,relaxed_SG,coord_relaxed,MSD_slope,MSD_final,vol_change_pct,MD_SG,verdict
+LiCoO2,Sc,Co,24,-5.4904,P-3m1 (164),6,0.0044,0.478,0.00,P1 (1),STABLE
+LiCoO2,Sc,Li,0,2.9401,C2/m (12),6,0.0086,2.403,0.00,P1 (1),UNSTABLE (migration + structural distortion)

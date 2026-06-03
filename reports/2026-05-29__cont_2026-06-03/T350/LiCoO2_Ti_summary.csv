@@ -1,0 +1,3 @@
+host,dopant,dopant_site,site_index,E_f_eV,relaxed_SG,coord_relaxed,MSD_slope,MSD_final,vol_change_pct,MD_SG,verdict
+LiCoO2,Ti,Co,24,-2.6208,P3m1 (156),6,-0.0008,0.273,0.00,P1 (1),STRUCTURAL COLLAPSE
+LiCoO2,Ti,Li,0,7.4044,C2 (5),6,0.0015,0.449,0.00,P1 (1),STRUCTURAL COLLAPSE
