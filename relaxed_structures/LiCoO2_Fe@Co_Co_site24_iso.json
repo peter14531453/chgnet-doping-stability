@@ -1,0 +1,16 @@
+{
+  "site_index": 24,
+  "energy_eV": -830.7734985351562,
+  "space_group": "Cm (8)",
+  "coordination": 6,
+  "nn_distances_A": [
+    1.9619859590679594,
+    1.963737999902427,
+    1.9648875938535308,
+    2.0363531029811055,
+    2.036507754481744,
+    2.0373594455536583
+  ],
+  "compensation_applied": false,
+  "comp_warnings": []
+}

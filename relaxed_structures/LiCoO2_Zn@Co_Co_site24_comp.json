@@ -1,0 +1,18 @@
+{
+  "site_index": 24,
+  "energy_eV": -824.7628784179688,
+  "space_group": "P-3m1 (164)",
+  "coordination": 6,
+  "nn_distances_A": [
+    2.0238885051858615,
+    2.0238889029946625,
+    2.023889467864681,
+    2.0238895614230237,
+    2.023890230686106,
+    2.0238903012263387
+  ],
+  "compensation_applied": false,
+  "comp_warnings": [
+    "Charge deficit (-1) cannot be compensated in CHGNet (would require adding Li interstitials or oxidising Co). Running single substitution without compensation. E_f is approximate."
+  ]
+}
