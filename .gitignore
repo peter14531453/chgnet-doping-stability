@@ -12,7 +12,6 @@ Miniconda3-*.exe
 # Workflow outputs (regenerable — except relaxed_structures which acts as cache)
 md_runs/
 analysis/
-reports/
 references.json
 md_out.traj
 md_out.log
