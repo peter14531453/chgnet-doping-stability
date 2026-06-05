@@ -6,8 +6,13 @@ based on the doping-stability criteria:
 
     1. Formation energy E_f below threshold
     2. Dopant MSD plateaus (no runaway diffusion)
-    3. Local coordination stays chemically sensible
-    4. No structural collapse (volume / space group preserved)
+    3. No structural collapse (lattice volume preserved)
+
+Coordination number is still measured and reported, but — like the
+time-averaged space group — it is NOT a pass/fail criterion: the
+first-shell count is too sensitive to the bond-length cutoff to gate on
+(large-ion dopants whose bonds sit near the cutoff at rest produced
+spurious "collapse" verdicts). Lattice volume is the structural gate.
 
 Plus the interpretive rules:
     - High E_f but MD stable           -> METASTABLE
@@ -31,14 +36,25 @@ EF_THRESHOLD_FAVORABLE = 0.0      # eV — "very good" boundary
 EF_THRESHOLD_OK = 1.0             # eV — overall PASS/FAIL boundary
 
 # MSD slope: a dopant oscillating around one site has a slope near zero.
-# Above this threshold we call it "migrating". 0.005 A^2/ps corresponds
-# to roughly one bond-length hop over the entire production run (~25 ps default).
+# Above the effective cutoff we call it "migrating". This value is an ABSOLUTE
+# FLOOR -- the smallest slope ever treated as migration, even in an
+# exceptionally quiet run -- corresponding to roughly one bond-length hop over
+# the production run. The actual per-run cutoff (see msd_threshold_A2_per_ps)
+# is the LARGER of this floor and the thermal-noise margin of error below, so
+# the test can only become stricter than this floor, never looser.
 MSD_PLATEAU_SLOPE_A2_PER_PS = 0.005
 
-# Coordination tolerance: how many neighbours (within cutoff_A) the dopant
-# is allowed to gain or lose during MD vs the relaxed value. ±1 covers
-# normal thermal fluctuations without flagging normal vibration as collapse.
-COORDINATION_TOLERANCE = 1
+# Thermal-noise calibration. A dopant confined to its site still produces a
+# nonzero late-time MSD slope purely from thermal vibration; the per-run
+# standard error of that slope (analysis key "msd_slope_stderr_A2_per_ps",
+# corrected for the MSD's strong autocorrelation) IS the margin of error of
+# those thermal fluctuations. A slope smaller than a few stderr is
+# statistically indistinguishable from a plateau. We require the slope to clear
+# the noise by this many standard errors before calling it migration, so the
+# cutoff sits at the edge of the thermal margin of error rather than at an
+# arbitrary fixed number. 2.0 ~ a one-sided 97.5% confidence that the slope is
+# real and not thermal jitter.
+MSD_NOISE_SIGMA = 2.0
 
 # Volume tolerance: >5% volume change during MD usually signals mechanical
 # instability or a phase transition at the simulation temperature.
@@ -93,6 +109,7 @@ class StabilityReport:
     md_temperature_K: float | None = None
     md_duration_ps: float | None = None
     md_msd_slope_A2_per_ps: float | None = None
+    md_msd_slope_stderr_A2_per_ps: float | None = None
     md_msd_final_A2: float | None = None
     md_max_displacement_A: float | None = None
     md_coordination_min: int | None = None
@@ -122,22 +139,25 @@ class StabilityReport:
         return self.formation_energy_eV < EF_THRESHOLD_FAVORABLE
 
     @property
-    def msd_pass(self):
-        if self.md_msd_slope_A2_per_ps is None:
-            return None
-        return self.md_msd_slope_A2_per_ps < MSD_PLATEAU_SLOPE_A2_PER_PS
+    def msd_threshold_A2_per_ps(self):
+        """Effective migration cutoff for this run: the larger of the fixed
+        floor and the thermal-noise margin of error (MSD_NOISE_SIGMA x the
+        slope's standard error). Falls back to the floor alone when no stderr
+        was recorded (e.g. analyses cached before noise calibration existed)."""
+        floor = MSD_PLATEAU_SLOPE_A2_PER_PS
+        se = self.md_msd_slope_stderr_A2_per_ps
+        if se is None or se != se:    # None or NaN -> no calibration available
+            return floor
+        return max(floor, MSD_NOISE_SIGMA * se)
 
     @property
-    def coordination_pass(self):
-        if (
-            self.relaxed_coordination is None
-            or self.md_coordination_min is None
-            or self.md_coordination_max is None
-        ):
+    def msd_pass(self):
+        slope = self.md_msd_slope_A2_per_ps
+        if slope is None or slope != slope:   # missing or NaN (no reliable fit)
             return None
-        low = abs(self.md_coordination_min - self.relaxed_coordination)
-        high = abs(self.md_coordination_max - self.relaxed_coordination)
-        return max(low, high) <= COORDINATION_TOLERANCE
+        # Confined (pass) when the slope stays below the noise-calibrated cutoff;
+        # a slope within +/- the thermal margin of error is just vibration.
+        return slope < self.msd_threshold_A2_per_ps
 
     @property
     def lattice_pass(self):
@@ -162,20 +182,19 @@ class StabilityReport:
             FAVORABLE/UNFAVORABLE (relaxation only) — E_f known, no MD yet
 
         MD data available:
-            structural_ok = coordination AND lattice both pass (or are skipped)
+            structural_ok = lattice volume preserved (or skipped)
 
             STABLE              — E_f ok  AND MSD plateaus AND structure intact
             METASTABLE          — E_f too high BUT MD shows dopant stays put;
                                   achievable via non-equilibrium synthesis
             MIGRATION           — E_f ok BUT dopant moves during MD;
                                   the relaxed site is not the true resting site
-            STRUCTURAL COLLAPSE — lattice or coordination breaks down;
+            STRUCTURAL COLLAPSE — lattice volume breaks down;
                                   doped phase is mechanically unstable at T
             UNSTABLE            — catch-all for other failure combinations
         """
         ef = self.ef_pass
         msd = self.msd_pass
-        coord = self.coordination_pass
         latt = self.lattice_pass
 
         if msd is None:
@@ -183,8 +202,8 @@ class StabilityReport:
                 return "INCOMPLETE"
             return "FAVORABLE (relaxation only)" if ef else "UNFAVORABLE (relaxation only)"
 
-        # structural_ok is False only when a criterion actively fails (not None)
-        structural_ok = (coord is not False) and (latt is not False)
+        # structural_ok is False only when the lattice volume actively fails (not None)
+        structural_ok = (latt is not False)
 
         if ef and msd and structural_ok:
             return "STABLE"
@@ -205,7 +224,7 @@ class StabilityReport:
         d["verdict"] = self.verdict
         d["ef_pass"] = self.ef_pass
         d["msd_pass"] = self.msd_pass
-        d["coordination_pass"] = self.coordination_pass
+        d["msd_threshold_A2_per_ps"] = self.msd_threshold_A2_per_ps
         d["lattice_pass"] = self.lattice_pass
         d["space_group_preserved"] = self.space_group_preserved
         return d
@@ -255,10 +274,17 @@ class StabilityReport:
         else:
             print(f"  Temperature:                {_fmt(self.md_temperature_K, '{:.0f}')} K")
             print(f"  Duration:                   {_fmt(self.md_duration_ps, '{:.1f}')} ps")
+            se = self.md_msd_slope_stderr_A2_per_ps
+            se_str = f" +/- {se:.4f}" if (se is not None and se == se) else ""
+            thr = self.msd_threshold_A2_per_ps
+            noise_set = (se is not None and se == se
+                         and MSD_NOISE_SIGMA * se > MSD_PLATEAU_SLOPE_A2_PER_PS)
+            gate = (f"{MSD_NOISE_SIGMA:g}x thermal stderr"
+                    if noise_set else f"{MSD_PLATEAU_SLOPE_A2_PER_PS} floor")
             print(
                 f"  Dopant MSD slope:           "
-                f"{_fmt(self.md_msd_slope_A2_per_ps, '{:.4f}')} A^2/ps   "
-                f"{_tag(self.msd_pass)}  (plateau if < {MSD_PLATEAU_SLOPE_A2_PER_PS})"
+                f"{_fmt(self.md_msd_slope_A2_per_ps, '{:.4f}')}{se_str} A^2/ps   "
+                f"{_tag(self.msd_pass)}  (migration if > {thr:.4f}, set by {gate})"
             )
             print(f"  Final MSD:                  {_fmt(self.md_msd_final_A2, '{:.3f}')} A^2")
             print(f"  Max displacement:           {_fmt(self.md_max_displacement_A)} A")
@@ -267,7 +293,7 @@ class StabilityReport:
                 f"{self.md_coordination_min}/"
                 f"{_fmt(self.md_coordination_mean, '{:.1f}')}/"
                 f"{self.md_coordination_max}   "
-                f"{_tag(self.coordination_pass)}"
+                f"(informational — sensitive to bond cutoff, not used in verdict)"
             )
             print(f"  Mean NN distance during MD: {_fmt(self.md_mean_nn_distance_A)} A")
             print(

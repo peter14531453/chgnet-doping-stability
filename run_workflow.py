@@ -447,6 +447,7 @@ def run(config, chgnet=None):
                 report.md_temperature_K = md_result["temperature_K"]
                 report.md_duration_ps = md_result["duration_ps"]
                 report.md_msd_slope_A2_per_ps = analysis["msd_slope_A2_per_ps"]
+                report.md_msd_slope_stderr_A2_per_ps = analysis.get("msd_slope_stderr_A2_per_ps")
                 report.md_msd_final_A2 = analysis["msd_final_A2"]
                 report.md_max_displacement_A = analysis["max_displacement_A"]
                 report.md_coordination_min = analysis["coordination_min"]

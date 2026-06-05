@@ -25,7 +25,6 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 EF_THRESHOLD_OK = 1.0
 MSD_PLATEAU_SLOPE = 0.005
-COORDINATION_TOLERANCE = 1
 VOLUME_TOLERANCE_PCT = 5.0
 
 
@@ -113,22 +112,24 @@ def _ef_plain(ef: float, mismatch: int, dopant: str, target: str) -> str:
     return plain + approx_note
 
 
-def _msd_plain(slope: float, final: float, max_disp: float) -> str:
-    if slope < 0.001:
+def _msd_plain(slope: float, final: float, max_disp: float,
+               threshold: float = MSD_PLATEAU_SLOPE) -> str:
+    if slope < threshold:
+        if slope < 0.2 * threshold:
+            mobility = (
+                f"An MSD slope this close to zero ({slope:.5f} Å²/ps) means the dopant was "
+                f"essentially locked in place — it barely moved at all during the simulation."
+            )
+        else:
+            mobility = (
+                f"The MSD slope ({slope:.5f} Å²/ps) is below this run's stability threshold of "
+                f"{threshold:.5f} Å²/ps — within the thermal-fluctuation noise — confirming the "
+                f"dopant stayed near its original position and did not migrate."
+            )
+    elif slope < 4 * threshold:
         mobility = (
-            f"An MSD slope this close to zero ({slope:.5f} Å²/ps) means the dopant was "
-            f"essentially locked in place — it barely moved at all during the simulation."
-        )
-    elif slope < MSD_PLATEAU_SLOPE:
-        mobility = (
-            f"The MSD slope ({slope:.5f} Å²/ps) is below the stability threshold of "
-            f"{MSD_PLATEAU_SLOPE} Å²/ps, confirming the dopant stayed near its original "
-            f"position and did not migrate."
-        )
-    elif slope < 0.02:
-        mobility = (
-            f"The MSD slope ({slope:.5f} Å²/ps) exceeds the stability threshold of "
-            f"{MSD_PLATEAU_SLOPE} Å²/ps, suggesting the dopant drifted slightly or hopped "
+            f"The MSD slope ({slope:.5f} Å²/ps) exceeds this run's stability threshold of "
+            f"{threshold:.5f} Å²/ps, suggesting the dopant drifted slightly or hopped "
             f"between nearby atomic sites."
         )
     else:
@@ -153,19 +154,12 @@ def _coordination_plain(cn_min: int, cn_max: int, cn_mean: float, cn_relax: int,
             f"entire simulation — the same number as right after relaxation. "
             f"The local bonding environment was perfectly preserved."
         )
-    elif abs(cn_min - cn_relax) <= COORDINATION_TOLERANCE and abs(cn_max - cn_relax) <= COORDINATION_TOLERANCE:
-        desc = (
-            f"The number of neighboring oxygen atoms fluctuated between **{cn_min} and {cn_max}** "
-            f"(average: {cn_mean:.1f}) during heating, compared to {cn_relax} after relaxation. "
-            f"This small variation is normal thermal fluctuation — the dopant's local environment "
-            f"is essentially intact."
-        )
     else:
         desc = (
-            f"The coordination number ranged from **{cn_min} to {cn_max}** (average: {cn_mean:.1f}), "
-            f"deviating significantly from the relaxed value of {cn_relax}. "
-            f"This indicates the local structure around the dopant changed during heating, "
-            f"which may signal structural distortion."
+            f"The number of neighboring oxygen atoms ranged from **{cn_min} to {cn_max}** "
+            f"(average: {cn_mean:.1f}) during heating, compared to {cn_relax} after relaxation. "
+            f"This count is very sensitive to the exact bond-length cutoff used to define a "
+            f"neighbor, so it is reported for context only and does not affect the verdict."
         )
     return f"{desc} The average dopant–oxygen bond length during the simulation was **{mean_bond:.3f} Å**."
 
@@ -198,10 +192,10 @@ def _verdict_plain(r: dict) -> str:
     if verdict == "STABLE":
         return (
             f"**{dopant} is a strong candidate for the {target} site.** "
-            f"All four stability tests passed: the formation energy is thermodynamically "
-            f"favorable, the dopant does not migrate at {temp_c:.0f}°C, its local atomic "
-            f"environment is preserved during heating, and the host crystal does not expand "
-            f"or contract excessively. This result supports further experimental investigation."
+            f"All stability tests passed: the formation energy is thermodynamically "
+            f"favorable, the dopant does not migrate at {temp_c:.0f}°C, and the host crystal "
+            f"does not expand or contract excessively. This result supports further "
+            f"experimental investigation."
         )
     if verdict == "METASTABLE":
         return (
@@ -220,21 +214,10 @@ def _verdict_plain(r: dict) -> str:
             f"Inspecting the MD trajectory could reveal where it ends up."
         )
     if verdict == "STRUCTURAL COLLAPSE":
-        coord_pass = r.get("coordination_pass", True)
-        latt_pass = r.get("lattice_pass", True)
-        if not coord_pass and latt_pass and r.get("msd_pass", True):
-            return (
-                f"**The coordination count flagged a potential problem, but this may be a "
-                f"measurement artifact.** The dopant barely moved (confirming site stability), "
-                f"but the coordination count fluctuated — possibly because the bond-detection "
-                f"cutoff is close to the actual bond length. Consider re-running analysis with "
-                f"a slightly larger `coordination_cutoff_A` value."
-            )
         return (
             f"**The crystal structure was destabilized at {temp_c:.0f}°C with this dopant.** "
-            + ("The local coordination around the dopant broke down. " if not coord_pass else "")
-            + ("The overall crystal volume changed too much. " if not latt_pass else "")
-            + "This dopant–site combination is unlikely to survive at operating temperature."
+            f"The overall crystal volume changed beyond the acceptable range during heating. "
+            f"This dopant–site combination is unlikely to survive at operating temperature."
         )
     if "FAVORABLE" in verdict:
         ef = r.get("formation_energy_eV", 0)
@@ -389,7 +372,10 @@ def generate_md(
         verdict = r["verdict"]
         thermo = "✅ Favorable" if ef_ok else "❌ Unfavorable"
         if msd is not None:
-            therm = "✅ Stable" if msd < MSD_PLATEAU_SLOPE else "❌ Migrating"
+            msd_ok = r.get("msd_pass")
+            if msd_ok is None:
+                msd_ok = msd < r.get("msd_threshold_A2_per_ps", MSD_PLATEAU_SLOPE)
+            therm = "✅ Stable" if msd_ok else "❌ Migrating"
         else:
             therm = "— Not tested"
         badge = (
@@ -520,6 +506,11 @@ def generate_md(
             md_nn = r.get("md_mean_nn_distance_A", 0.0)
             vol_chg = r.get("md_volume_change_pct", 0.0)
             md_sg = r.get("md_space_group", "N/A")
+            msd_thr = r.get("msd_threshold_A2_per_ps", MSD_PLATEAU_SLOPE)
+            msd_se = r.get("md_msd_slope_stderr_A2_per_ps")
+            slope_cell = f"**{msd_slope:.5f} Å²/ps**"
+            if msd_se is not None:
+                slope_cell += f" ± {msd_se:.5f}"
 
             L += [
                 f"#### C. Thermal Stability at {temp_c_r:.0f}°C (Molecular Dynamics)",
@@ -531,12 +522,12 @@ def generate_md(
                 "",
                 "**Dopant mobility (Mean Squared Displacement — MSD):**",
                 "",
-                _msd_plain(msd_slope, msd_final, max_disp),
+                _msd_plain(msd_slope, msd_final, max_disp, msd_thr),
                 "",
                 f"| Metric | Value | Threshold | Result |",
                 f"|--------|-------|-----------|--------|",
-                f"| MSD slope | **{msd_slope:.5f} Å²/ps** | < {MSD_PLATEAU_SLOPE} Å²/ps | "
-                f"{_pass_fail(r.get('msd_pass', msd_slope < MSD_PLATEAU_SLOPE))} |",
+                f"| MSD slope | {slope_cell} | < {msd_thr:.5f} Å²/ps | "
+                f"{_pass_fail(r.get('msd_pass', msd_slope < msd_thr))} |",
                 f"| Max displacement | **{max_disp:.3f} Å** | reference only | — |",
                 f"| Final MSD | **{msd_final:.4f} Å²** | reference only | — |",
                 "",
@@ -547,8 +538,7 @@ def generate_md(
                 f"| Metric | Value | Threshold | Result |",
                 f"|--------|-------|-----------|--------|",
                 f"| Coordination range | **{cn_min}–{cn_max}** (mean {cn_mean:.1f}) | "
-                f"within ±{COORDINATION_TOLERANCE} of {cn_relax} | "
-                f"{_pass_fail(r.get('coordination_pass', True))} |",
+                f"relaxed = {cn_relax} | informational |",
                 f"| Avg bond length (MD) | **{md_nn:.3f} Å** | reference only | — |",
                 "",
                 "**Crystal volume stability:**",

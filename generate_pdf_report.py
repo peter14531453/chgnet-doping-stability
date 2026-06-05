@@ -57,7 +57,6 @@ def _safe(text: str) -> str:
 # ---------------------------------------------------------------------------
 EF_THRESHOLD_OK = 1.0
 MSD_PLATEAU_SLOPE = 0.005
-COORDINATION_TOLERANCE = 1
 VOLUME_TOLERANCE_PCT = 5.0
 
 # ---------------------------------------------------------------------------
@@ -103,15 +102,17 @@ def _ef_narrative(ef: float, mismatch: int, dopant: str, target: str) -> str:
     )
 
 
-def _msd_narrative(slope: float, final: float, max_disp: float) -> str:
+def _msd_narrative(slope: float, final: float, max_disp: float,
+                   threshold: float = MSD_PLATEAU_SLOPE) -> str:
     if slope < 0:
         mobility = "The negative slope is a flat plateau — essentially no migration detected."
-    elif slope < 0.001:
+    elif slope < 0.2 * threshold:
         mobility = "The slope is near zero, confirming the dopant is tightly confined to its site."
-    elif slope < MSD_PLATEAU_SLOPE:
-        mobility = "The slope is small and below the migration threshold — the dopant is site-stable."
-    elif slope < 0.02:
-        mobility = "The slope exceeds the plateau threshold, suggesting mild drift or site-hopping."
+    elif slope < threshold:
+        mobility = ("The slope sits within the thermal-fluctuation margin of error for this run "
+                    "(below the noise-calibrated cutoff) — the dopant is site-stable.")
+    elif slope < 4 * threshold:
+        mobility = "The slope exceeds the migration cutoff, suggesting mild drift or site-hopping."
     else:
         mobility = "The large slope indicates significant diffusion — the dopant is migrating."
 
@@ -127,20 +128,14 @@ def _coordination_narrative(
     if cn_min == cn_max == cn_relaxed:
         stability = (
             f"Coordination was exactly {cn_relaxed} throughout the entire trajectory — "
-            "a near-perfect result indicating the dopant held its local environment rigidly."
-        )
-    elif abs(cn_min - cn_relaxed) <= COORDINATION_TOLERANCE and abs(cn_max - cn_relaxed) <= COORDINATION_TOLERANCE:
-        stability = (
-            f"Coordination fluctuated between {cn_min} and {cn_max} (mean {cn_mean:.1f}), "
-            f"within the +/-{COORDINATION_TOLERANCE} tolerance of the relaxed value ({cn_relaxed}). "
-            "This is consistent with normal thermal vibration."
+            "the dopant held its local environment rigidly."
         )
     else:
         stability = (
-            f"Coordination fluctuated between {cn_min} and {cn_max} (mean {cn_mean:.1f}), "
-            f"deviating by more than +/-{COORDINATION_TOLERANCE} from the relaxed value ({cn_relaxed}). "
-            "This may indicate structural distortion, or that the bond-length cutoff is too close "
-            "to the actual bond length — check the coordination_cutoff_A setting."
+            f"Coordination fluctuated between {cn_min} and {cn_max} (mean {cn_mean:.1f}) "
+            f"versus the relaxed value of {cn_relaxed}. The first-shell count is sensitive "
+            "to the bond-length cutoff, so it is reported for context only and does not "
+            "affect the verdict."
         )
     return f"{stability} Mean nearest-neighbour distance during MD = {mean_bond:.3f} A."
 
@@ -169,9 +164,9 @@ def _verdict_narrative(report: dict) -> str:
     if verdict == "STABLE":
         return (
             f"{dopant} is thermodynamically favorable and kinetically stable on the "
-            f"{target} site at {temp_c:.0f} C. All four stability criteria pass: formation "
-            f"energy is favorable, the dopant does not migrate during MD, its coordination "
-            f"environment is preserved, and the host lattice volume is unchanged."
+            f"{target} site at {temp_c:.0f} C. All stability criteria pass: formation "
+            f"energy is favorable, the dopant does not migrate during MD, and the host "
+            f"lattice volume is unchanged."
         )
     if verdict == "METASTABLE":
         return (
@@ -187,21 +182,10 @@ def _verdict_narrative(report: dict) -> str:
             f"Inspect the MSD and trajectory to identify where the dopant ends up."
         )
     if verdict == "STRUCTURAL COLLAPSE":
-        coord_pass = report.get("coordination_pass", True)
-        latt_pass = report.get("lattice_pass", True)
-        if not coord_pass and latt_pass and report.get("msd_pass", True):
-            return (
-                f"The coordination criterion failed while MSD and volume both pass, "
-                f"suggesting a possible cutoff artifact rather than a true structural collapse. "
-                f"The {dopant} atom barely moves (MSD = {report.get('md_msd_final_A2', 0):.3f} A²) "
-                f"but the coordination count fluctuates because the bond length at the {target} site "
-                f"is close to the analysis cutoff. Consider increasing coordination_cutoff_A and re-running analysis."
-            )
         return (
-            f"The doped structure shows signs of mechanical instability at {temp_c:.0f} C. "
-            f"{'Coordination ' if not coord_pass else ''}"
-            f"{'and lattice volume ' if not latt_pass else ''}"
-            f"criteria failed. This dopant-site combination may not be stable at this temperature."
+            f"The doped structure shows signs of mechanical instability at {temp_c:.0f} C: "
+            f"the host lattice volume changed beyond the +/-{VOLUME_TOLERANCE_PCT:.0f}% tolerance. "
+            f"This dopant-site combination may not be stable at this temperature."
         )
     if "FAVORABLE" in verdict:
         return (
@@ -467,7 +451,7 @@ def generate_pdf(
     # Summary table across all sites
     if len(reports) > 1:
         pdf.ln(2)
-        headers = ["Site", "E_f (eV)", "Charge", "Compensation", "MSD pass", "Coord pass", "Verdict"]
+        headers = ["Site", "E_f (eV)", "Charge", "Compensation", "MSD pass", "Verdict"]
         rows = []
         for r in sorted(reports, key=lambda x: x["formation_energy_eV"]):
             mismatch = r.get("charge_mismatch") or 0
@@ -477,7 +461,6 @@ def generate_pdf(
                 f"{mismatch:+d}",
                 "Yes" if r.get("compensation_applied") else "No",
                 _pass_label(r.get("msd_pass")),
-                _pass_label(r.get("coordination_pass")),
                 r["verdict"],
             ])
         pdf.comparison_table(headers, rows)
@@ -548,12 +531,17 @@ def generate_pdf(
             bond_md = r.get("md_mean_nn_distance_A", 0)
             bond_relax = r.get("relaxed_mean_nn_distance_A", 0)
             dv = r.get("md_volume_change_pct", 0)
+            msd_thr = r.get("msd_threshold_A2_per_ps", MSD_PLATEAU_SLOPE)
+            msd_se = r.get("md_msd_slope_stderr_A2_per_ps")
+            slope_val = f"{msd_slope:.5f} A²/ps"
+            if msd_se is not None:
+                slope_val += f" ± {msd_se:.5f}"
 
             pdf.metric_row(
                 "MSD slope (late-time)",
-                f"{msd_slope:.5f} A²/ps",
+                slope_val,
                 r.get("msd_pass"),
-                "< 0.005 to pass (plateau = stable)",
+                f"< {msd_thr:.5f} to pass (noise-calibrated plateau)",
             )
             pdf.metric_row(
                 "Final MSD",
@@ -570,8 +558,8 @@ def generate_pdf(
             pdf.metric_row(
                 f"Coordination (min/mean/max)",
                 f"{cn_min} / {cn_mean:.1f} / {cn_max}",
-                r.get("coordination_pass"),
-                f"relaxed = {cn_relaxed}, tolerance +/-1",
+                None,
+                f"relaxed = {cn_relaxed}, informational only",
             )
             pdf.metric_row(
                 "Mean bond length (MD vs relaxed)",
@@ -586,7 +574,7 @@ def generate_pdf(
                 "< +/-5% to pass",
             )
 
-            pdf.body(_msd_narrative(msd_slope, msd_final, max_disp), indent=4)
+            pdf.body(_msd_narrative(msd_slope, msd_final, max_disp, msd_thr), indent=4)
             if cn_min is not None:
                 pdf.body(_coordination_narrative(cn_min, cn_max, cn_mean, cn_relaxed, bond_md), indent=4)
             pdf.body(_volume_narrative(dv), indent=4)

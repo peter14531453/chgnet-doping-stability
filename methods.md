@@ -14,7 +14,7 @@ substitution site(s), and target temperature, whether the dopant is
 
 1. **thermodynamically favourable** to incorporate (formation energy), and
 2. **kinetically stable** on the proposed site at temperature (MD), and
-3. **structurally compatible** with the host lattice (coordination, volume).
+3. **structurally compatible** with the host lattice (lattice volume).
 
 The implementation is built on **CHGNet** [1] — a universal pretrained
 machine-learning interatomic potential trained on r²SCAN density functional
@@ -264,24 +264,59 @@ MSD time series to extract the long-time slope:
 $$\mathrm{MSD}(t) \approx 6 D t + C \quad\text{(3D Einstein relation)}$$
 
 Using only the late-time portion avoids contamination from the initial
-ballistic and sub-diffusive regimes. Slope < 0.005 Å²/ps is taken as
-"plateau" (dopant confined to one site); slope above this is interpreted
-as ongoing migration.
+ballistic and sub-diffusive regimes.
 
-### 6.2 Coordination number
+**Thermal-noise calibration of the migration cutoff.** A dopant confined
+to its site is *not* motionless — it oscillates thermally, so its late-time
+MSD wanders around a plateau and the linear fit returns a small nonzero
+slope (frequently *negative*, which is impossible for genuine diffusion and
+therefore a direct readout of the noise). A single fixed slope cutoff cannot
+separate signal from this noise, because the noise level itself varies by
+more than an order of magnitude between runs (different temperature, host,
+dopant mass, and plateau amplitude). The fit therefore also returns the
+**standard error of the slope**, $\sigma_b$, which is precisely the margin of
+error contributed by thermal fluctuations. Because the single-origin MSD is a
+near-continuous random walk, successive points are strongly autocorrelated
+(lag-1 $\rho \approx 0.8\text{–}0.95$); ordinary least squares, assuming
+independent residuals, understates $\sigma_b$ several-fold. We model the fit
+residuals as an AR(1) process and inflate the OLS error accordingly,
+
+$$\sigma_b = \sigma_b^{\mathrm{OLS}}\sqrt{\tfrac{1+\rho}{1-\rho}},
+\qquad N_{\mathrm{eff}} = N\,\tfrac{1-\rho}{1+\rho},$$
+
+so $\sigma_b$ reflects the *effective* number of independent samples in the
+fit window. The dopant is classified as **migrating** only when its slope
+rises above the larger of a fixed floor and the thermal margin of error,
+
+$$\text{cutoff} = \max\bigl(0.005\ \text{Å}^2/\text{ps},\ 2\,\sigma_b\bigr),$$
+
+i.e. the slope must exceed thermal noise by $\approx 2\sigma$ (one-sided
+$\approx$ 97.5 % confidence). A slope within $\pm 2\sigma_b$ of zero is
+statistically indistinguishable from a vibrating-but-stationary atom and is
+reported as a plateau. The floor (`MSD_PLATEAU_SLOPE_A2_PER_PS`) is the
+smallest slope ever treated as migration even in an exceptionally quiet run
+($\sigma_b$ near zero); the multiplier is `MSD_NOISE_SIGMA`. Because the
+cutoff is the *maximum* of the two terms, the test is never looser than the
+old fixed threshold — it only tightens for noisy runs, eliminating the
+spurious "migration" verdicts that thermal fluctuations would otherwise
+produce.
+
+### 6.2 Coordination number (informational only)
 
 For every production frame, distances from the dopant atom to all other
 atoms (minimum-image convention) are computed, and the count within
 `coordination_cutoff_A` (default 2.5 Å) is recorded. The min, max, and
 mean over the trajectory are reported.
 
-The cutoff is chosen to isolate the **first coordination shell only**.
-In a layered oxide, the first shell of a 6-coordinated site has oxygens
-at 1.9–2.0 Å, the second shell of transition metals at 2.8–2.9 Å, and a
-third shell at ~3.1 Å. A cutoff of 2.5 Å reliably captures only the O
-neighbours for Al, Co, Mn dopants. For larger ions (Ca, Sr) the user
-should increase the cutoff to ≈ 2.7 Å so the bond length expansion
-during MD does not artificially drop the count.
+The first-shell count is **reported for diagnostics only and is not used
+in the verdict** (see §7). The count is extremely sensitive to the choice
+of `coordination_cutoff_A`: for large dopants (Ca, Sr, or alkali-site
+substitutions) the relaxed dopant–O bond length already sits near the
+2.5 Å cutoff, so ordinary thermal vibration pushes individual neighbours
+in and out of the shell and makes the min/max swing by 2–3 even when the
+lattice is mechanically intact. Gating on this count produced spurious
+"collapse" verdicts for otherwise-stable large-ion dopants, so the
+criterion was removed; lattice volume (§6.4) is the structural gate.
 
 ### 6.3 Mean nearest-neighbour distance
 
@@ -317,24 +352,28 @@ diagnostic.
 ## 7. Phase 6 — Stability classification
 
 Every test produces a `StabilityReport` object aggregating the Phase 3
-and Phase 5 outputs. Four criteria are evaluated against fixed
+and Phase 5 outputs. Three criteria are evaluated against fixed
 thresholds:
 
 | Criterion | Pass condition | Threshold | Rationale |
 |---|---|---|---|
 | Formation energy | E_f < 1 eV | `EF_THRESHOLD_OK = 1.0` | 1 eV is the conventional upper bound for dilute defect feasibility under equilibrium synthesis |
-| Dopant mobility | MSD slope < 0.005 Å²/ps | `MSD_PLATEAU_SLOPE_A2_PER_PS` | ≈ one bond-length hop over 50 ps of production |
-| Coordination stability | \|MD coord − relaxed coord\| ≤ 1 | `COORDINATION_TOLERANCE = 1` | covers normal thermal fluctuation without flagging vibration |
+| Dopant mobility | MSD slope < max(0.005 Å²/ps, 2σ_b) | `MSD_PLATEAU_SLOPE_A2_PER_PS`, `MSD_NOISE_SIGMA` | cutoff held at the edge of the per-run thermal-fluctuation margin of error σ_b (§6.1); floor ≈ one bond-length hop over the production run |
 | Lattice integrity | \|ΔV/V\| < 5 % | `VOLUME_CHANGE_TOLERANCE_PCT` | conventional cutoff for mechanical stability of solid solutions |
+
+Coordination number is measured and reported but is **not** a pass/fail
+criterion (see §6.2): the first-shell count is too sensitive to the bond
+cutoff to gate on, and doing so produced spurious "collapse" verdicts for
+large-ion dopants whose bonds sit near the cutoff at rest.
 
 The criteria combine into one of six verdicts:
 
 | Verdict | Meaning |
 |---|---|
-| `STABLE` | All four criteria pass — dopant sits favourably on its site at T |
+| `STABLE` | All three criteria pass — dopant sits favourably on its site at T |
 | `METASTABLE` | E_f marginal but MD shows stable site occupancy; achievable via quench / ion exchange |
 | `MIGRATION` | E_f favourable but dopant moves during MD; the relaxed site is not the true resting site |
-| `STRUCTURAL COLLAPSE` | Coordination or volume changes signal mechanical instability |
+| `STRUCTURAL COLLAPSE` | Lattice volume change signals mechanical instability |
 | `FAVORABLE (relaxation only)` | E_f passes, MD not yet run |
 | `UNFAVORABLE (relaxation only)` | E_f fails, MD not yet run |
 

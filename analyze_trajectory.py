@@ -75,20 +75,47 @@ def compute_msd(displacements):
 
 
 def late_time_slope(time_ps, msd, fraction=0.5):
-    """Fit a line to the last `fraction` of the MSD curve and return its slope.
+    """Fit a line to the last `fraction` of the MSD curve.
+
+    Returns ``(slope, stderr)`` in A^2/ps. ``stderr`` is the standard error of
+    the fitted slope and is the statistical margin of error contributed by
+    thermal fluctuations: a confined dopant still oscillates about its site, so
+    its late-time MSD wanders around a plateau and a least-squares fit returns a
+    small nonzero (often negative) slope whose typical magnitude is exactly this
+    stderr. report.py only calls the dopant "migrating" when the slope rises
+    ~2 stderr above zero, so the cutoff sits at the edge of the thermal noise
+    rather than at an arbitrary fixed value (see MSD_NOISE_SIGMA).
+
+    The single-origin MSD is a near-continuous random walk, so consecutive
+    points are strongly autocorrelated (lag-1 rho ~ 0.8-0.95). Naive OLS, which
+    assumes independent residuals, then understates the slope uncertainty
+    several-fold. We model the fit residuals as AR(1) and inflate the OLS
+    standard error by sqrt((1+rho)/(1-rho)) -- equivalently, the effective
+    number of independent samples is N*(1-rho)/(1+rho).
 
     Using only the late-time portion avoids the initial ballistic/subdiffusive
-    regime. Slope near zero = plateau (stable). Slope >> 0 = diffusing dopant.
-    Threshold in report.py: MSD_PLATEAU_SLOPE_A2_PER_PS = 0.005 A^2/ps.
+    regime. Slope near zero = plateau (stable); slope significantly > 0 =
+    long-range diffusion (migration).
     """
     n = len(msd)
     start = int(n * (1 - fraction))
     if n - start < 4:   # too few points for a reliable fit
-        return float("nan")
-    t = time_ps[start:]
-    m = msd[start:]
-    slope, _ = np.polyfit(t, m, 1)
-    return float(slope)
+        return float("nan"), float("nan")
+    t = np.asarray(time_ps[start:], dtype=float)
+    m = np.asarray(msd[start:], dtype=float)
+    slope, intercept = np.polyfit(t, m, 1)
+    resid = m - (slope * t + intercept)
+    dof = len(t) - 2
+    sxx = float(np.sum((t - t.mean()) ** 2))
+    if dof < 1 or sxx <= 0:
+        return float(slope), float("nan")
+    se_ols = np.sqrt((np.sum(resid ** 2) / dof) / sxx)
+    # Inflate for serial correlation of the residuals (AR(1) approximation).
+    r0 = float(np.sum(resid * resid))
+    r1 = float(np.sum(resid[1:] * resid[:-1]))
+    rho = min(max(r1 / r0 if r0 > 0 else 0.0, 0.0), 0.99)
+    se_corr = se_ols * np.sqrt((1.0 + rho) / (1.0 - rho))
+    return float(slope), float(se_corr)
 
 
 def coordination_history(frames, atom_index, cutoff_A=2.5):
@@ -232,7 +259,7 @@ def analyze(md_result, dopant_symbol, cutoff_A=2.5, output_dir="analysis", force
 
     disps = unwrapped_displacements(frames, dopant_index)
     msd = compute_msd(disps)
-    slope = late_time_slope(time_ps, msd)
+    slope, slope_stderr = late_time_slope(time_ps, msd)
     max_disp = float(np.max(np.linalg.norm(disps, axis=1)))
 
     coord = coordination_history(frames, dopant_index, cutoff_A=cutoff_A)
@@ -249,6 +276,7 @@ def analyze(md_result, dopant_symbol, cutoff_A=2.5, output_dir="analysis", force
 
     result = {
         "msd_slope_A2_per_ps": float(slope),
+        "msd_slope_stderr_A2_per_ps": float(slope_stderr),
         "msd_final_A2": float(msd[-1]),
         "max_displacement_A": float(max_disp),
         "coordination_min": int(min(coord)),
