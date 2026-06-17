@@ -1,0 +1,36 @@
+# generated using pymatgen
+data_LiMgO2
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   3.71722309
+_cell_length_b   3.71722533
+_cell_length_c   3.71721485
+_cell_angle_alpha   30.95759460
+_cell_angle_beta   30.95761811
+_cell_angle_gamma   30.95752660
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   LiMgO2
+_chemical_formula_sum   'Li1 Mg1 O2'
+_cell_volume   12.05633228
+_cell_formula_units_Z   1
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_type_symbol
+ _atom_type_oxidation_number
+  Li+  1.0
+  Mg  0.0
+  O2-  -2.0
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Li+  Li0  1  0.00006832  0.00006513  0.00008037  1
+  Mg  Mg1  1  0.49996329  0.49996617  0.49995282  1
+  O2-  O2  1  0.21765629  0.21765632  0.21765618  1
+  O2-  O3  1  0.78231209  0.78231242  0.78231063  1

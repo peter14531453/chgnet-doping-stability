@@ -1,0 +1,36 @@
+# generated using pymatgen
+data_LiAlO2
+_symmetry_space_group_name_H-M   'P 1'
+_cell_length_a   11.77659590
+_cell_length_b   9.89053982
+_cell_length_c   9.92919690
+_cell_angle_alpha   48.28294952
+_cell_angle_beta   46.89226964
+_cell_angle_gamma   49.55874380
+_symmetry_Int_Tables_number   1
+_chemical_formula_structural   LiAlO2
+_chemical_formula_sum   'Li1 Al1 O2'
+_cell_volume   588.99900630
+_cell_formula_units_Z   1
+loop_
+ _symmetry_equiv_pos_site_id
+ _symmetry_equiv_pos_as_xyz
+  1  'x, y, z'
+loop_
+ _atom_type_symbol
+ _atom_type_oxidation_number
+  Li+  1.0
+  Al  0.0
+  O2-  -2.0
+loop_
+ _atom_site_type_symbol
+ _atom_site_label
+ _atom_site_symmetry_multiplicity
+ _atom_site_fract_x
+ _atom_site_fract_y
+ _atom_site_fract_z
+ _atom_site_occupancy
+  Li+  Li0  1  -0.32665716  0.14830559  -0.05993591  1
+  Al  Al1  1  0.59817744  0.09831009  0.81814846  1
+  O2-  O2  1  0.44510609  0.24342831  -0.05710923  1
+  O2-  O3  1  0.78337366  1.00995596  0.79889665  1
