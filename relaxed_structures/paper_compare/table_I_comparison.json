@@ -1,0 +1,465 @@
+{
+  "paper": "Boev et al., Phys. Rev. Materials 8, 055403 (2024)",
+  "supercell_atoms": 128,
+  "n_formula_units": 32,
+  "e_lco_fu_eV": -33.16533279418945,
+  "results": [
+    {
+      "dopant": "Mg",
+      "mo_distances": [
+        [
+          1.97,
+          1
+        ],
+        [
+          2.07,
+          1
+        ],
+        [
+          2.12,
+          1
+        ]
+      ],
+      "mo_dist_str": "1.97x1, 2.07x1, 2.12x1",
+      "relaxed_sg": "P1",
+      "mu_m": null,
+      "mu_ap": null,
+      "es_sg_eV": -5.86065673828125,
+      "es_r3m_eV": -29.380382537841797,
+      "delta_r": 1.3211009174311925,
+      "e_doped_eV": -1061.7203369140625,
+      "ref_sg": {
+        "label": "MgO+0.5Li2O2",
+        "space_group": "MgO(Fm-3m (225))+0.5Li2O2(P6_3/mmc (194))",
+        "energy_per_fu_eV": -27.734363555908203,
+        "mp_id": "mp-1265+mp-841"
+      },
+      "ref_r3m": {
+        "label": "ref_LiMgO2_R3m",
+        "space_group": "R-3m (166)",
+        "energy_per_fu_eV": -4.214637756347656
+      },
+      "paper_table_I": {
+        "mo_dist": "2.02x2, 2.03x2, 2.06x2",
+        "sg": "MgO+0.5Li2O2",
+        "mu_m": 0.0,
+        "mu_ap": 1.02,
+        "es_sg": 0.08,
+        "es_r3m": -0.78,
+        "delta_r": 1.32
+      },
+      "notes": [
+        "CHGNet does not provide magnetic moments (paper uses DFT+U)."
+      ]
+    },
+    {
+      "dopant": "Al",
+      "mo_distances": [
+        [
+          1.75,
+          1
+        ],
+        [
+          1.78,
+          1
+        ],
+        [
+          1.84,
+          2
+        ]
+      ],
+      "mo_dist_str": "1.75x1, 1.78x1, 1.84x2",
+      "relaxed_sg": "P1",
+      "mu_m": null,
+      "mu_ap": null,
+      "es_sg_eV": 0.9113540649414062,
+      "es_r3m_eV": -6.744815826416016,
+      "delta_r": 0.981651376146789,
+      "e_doped_eV": -1060.332275390625,
+      "ref_sg": {
+        "label": "ref_LiAlO2_MP_mp-aaaaalvt",
+        "space_group": "R-3m (166)",
+        "energy_per_fu_eV": -33.11831283569336,
+        "mp_id": "mp-aaaaalvt"
+      },
+      "ref_r3m": {
+        "label": "ref_LiAlO2_R3m",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -25.462142944335938
+      },
+      "paper_table_I": {
+        "mo_dist": "1.93x6",
+        "sg": "P41212",
+        "mu_m": 0.0,
+        "mu_ap": 0.01,
+        "es_sg": -0.07,
+        "es_r3m": null,
+        "delta_r": 0.98
+      },
+      "notes": [
+        "CHGNet does not provide magnetic moments (paper uses DFT+U).",
+        "MP ground-state SG hint: R-3m (mp-aaaaalvt)."
+      ]
+    },
+    {
+      "dopant": "Ti",
+      "mo_distances": [
+        [
+          1.48,
+          2
+        ],
+        [
+          1.5,
+          2
+        ],
+        [
+          1.58,
+          1
+        ],
+        [
+          1.6,
+          1
+        ],
+        [
+          2.25,
+          2
+        ],
+        [
+          2.29,
+          1
+        ],
+        [
+          2.32,
+          1
+        ],
+        [
+          2.39,
+          1
+        ],
+        [
+          2.41,
+          1
+        ],
+        [
+          2.44,
+          1
+        ]
+      ],
+      "mo_dist_str": "1.48x2, 1.50x2, 1.58x1, 1.60x1, 2.25x2, 2.29x1, 2.32x1, 2.39x1, 2.41x1, 2.44x1",
+      "relaxed_sg": "P1",
+      "mu_m": 0.49406957626342773,
+      "mu_ap": 1.540313720703125,
+      "es_sg_eV": 737.2107849121094,
+      "es_r3m_eV": 751.5871238708496,
+      "delta_r": 1.1100917431192658,
+      "e_doped_eV": -329.614990234375,
+      "ref_sg": {
+        "label": "ref_LiTiO2_MP_mp-aaaaceqi",
+        "space_group": "C2/c (15)",
+        "energy_per_fu_eV": -38.70045852661133,
+        "mp_id": "mp-aaaaceqi"
+      },
+      "ref_r3m": {
+        "label": "ref_LiTiO2_R3m",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -53.07679748535156
+      },
+      "paper_table_I": {
+        "mo_dist": "1.94x2, 1.99x2, 2.03x2",
+        "sg": "I41/amd",
+        "mu_m": 0.01,
+        "mu_ap": 2.68,
+        "es_sg": -0.47,
+        "es_r3m": -0.56,
+        "delta_r": 1.11
+      },
+      "notes": [
+        "MP ground-state SG hint: I4_1/amd (mp-aaaaceqi)."
+      ]
+    },
+    {
+      "dopant": "V",
+      "mo_distances": [
+        [
+          1.55,
+          1
+        ],
+        [
+          1.58,
+          3
+        ],
+        [
+          1.59,
+          2
+        ],
+        [
+          2.23,
+          1
+        ],
+        [
+          2.3,
+          1
+        ],
+        [
+          2.37,
+          1
+        ],
+        [
+          2.43,
+          1
+        ]
+      ],
+      "mo_dist_str": "1.55x1, 1.58x3, 1.59x2, 2.23x1, 2.30x1, 2.37x1, 2.43x1",
+      "relaxed_sg": "P1",
+      "mu_m": 1.2758235931396484,
+      "mu_ap": 1.470324993133545,
+      "es_sg_eV": 1015.7778053283691,
+      "es_r3m_eV": 1015.7778053283691,
+      "delta_r": 1.0642201834862384,
+      "e_doped_eV": -27.7095947265625,
+      "ref_sg": {
+        "label": "ref_LiVO2_R3m",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -15.362083435058594,
+        "mp_id": null
+      },
+      "ref_r3m": {
+        "label": "ref_LiVO2_R3m",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -15.362083435058594
+      },
+      "paper_table_I": {
+        "mo_dist": "1.91x2, 1.99x2, 2.00x2",
+        "sg": "R-3m",
+        "mu_m": 1.03,
+        "mu_ap": 2.68,
+        "es_sg": 0.39,
+        "es_r3m": 0.39,
+        "delta_r": 1.06
+      },
+      "notes": [
+        "V: ground-state LiMO2 is R-3m; Es(SG) = Es(R-3m)."
+      ]
+    },
+    {
+      "dopant": "Cr",
+      "mo_distances": [
+        [
+          1.62,
+          3
+        ],
+        [
+          1.64,
+          1
+        ],
+        [
+          1.66,
+          2
+        ],
+        [
+          2.32,
+          1
+        ]
+      ],
+      "mo_dist_str": "1.62x3, 1.64x1, 1.66x2, 2.32x1",
+      "relaxed_sg": "P1",
+      "mu_m": 2.324429750442505,
+      "mu_ap": 1.4086716175079346,
+      "es_sg_eV": 849.7385444641113,
+      "es_r3m_eV": 849.7385444641113,
+      "delta_r": 1.128440366972477,
+      "e_doped_eV": -181.093017578125,
+      "ref_sg": {
+        "label": "ref_LiCrO2_R3m",
+        "space_group": "R3m (160)",
+        "energy_per_fu_eV": -2.7062454223632812,
+        "mp_id": null
+      },
+      "ref_r3m": {
+        "label": "ref_LiCrO2_R3m",
+        "space_group": "R3m (160)",
+        "energy_per_fu_eV": -2.7062454223632812
+      },
+      "paper_table_I": {
+        "mo_dist": "2.00x6",
+        "sg": "R-3m",
+        "mu_m": 2.96,
+        "mu_ap": null,
+        "es_sg": 0.1,
+        "es_r3m": 0.1,
+        "delta_r": 1.13
+      },
+      "notes": [
+        "Cr: ground-state LiMO2 is R-3m; Es(SG) = Es(R-3m)."
+      ]
+    },
+    {
+      "dopant": "Mn",
+      "mo_distances": [
+        [
+          1.69,
+          2
+        ],
+        [
+          1.83,
+          1
+        ],
+        [
+          1.92,
+          1
+        ],
+        [
+          1.99,
+          1
+        ]
+      ],
+      "mo_dist_str": "1.69x2, 1.83x1, 1.92x1, 1.99x1",
+      "relaxed_sg": "P1",
+      "mu_m": 2.2140588760375977,
+      "mu_ap": null,
+      "es_sg_eV": 1.7343101501464844,
+      "es_r3m_eV": -20.605937957763672,
+      "delta_r": 1.18348623853211,
+      "e_doped_eV": -1064.301513671875,
+      "ref_sg": {
+        "label": "ref_LiMnO2_MP_mp-aaabqyjg",
+        "space_group": "C2/m (12)",
+        "energy_per_fu_eV": -37.91050720214844,
+        "mp_id": "mp-aaabqyjg"
+      },
+      "ref_r3m": {
+        "label": "ref_LiMnO2_R3m",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -15.570259094238281
+      },
+      "paper_table_I": {
+        "mo_dist": "1.93x2, 2.06x4",
+        "sg": "C2/m",
+        "mu_m": 3.82,
+        "mu_ap": null,
+        "es_sg": 0.38,
+        "es_r3m": 0.22,
+        "delta_r": 1.18
+      },
+      "notes": [
+        "MP ground-state SG hint: C2/m (mp-aaabqyjg)."
+      ]
+    },
+    {
+      "dopant": "Fe",
+      "mo_distances": [
+        [
+          1.55,
+          1
+        ],
+        [
+          1.58,
+          2
+        ],
+        [
+          1.6,
+          1
+        ],
+        [
+          1.65,
+          1
+        ],
+        [
+          1.67,
+          1
+        ],
+        [
+          2.27,
+          1
+        ],
+        [
+          2.42,
+          2
+        ],
+        [
+          2.44,
+          1
+        ]
+      ],
+      "mo_dist_str": "1.55x1, 1.58x2, 1.60x1, 1.65x1, 1.67x1, 2.27x1, 2.42x2, 2.44x1",
+      "relaxed_sg": "P1",
+      "mu_m": 2.7941555976867676,
+      "mu_ap": 1.4624357223510742,
+      "es_sg_eV": 1048.7767181396484,
+      "es_r3m_eV": 1109.9640846252441,
+      "delta_r": 1.18348623853211,
+      "e_doped_eV": -15.55078125,
+      "ref_sg": {
+        "label": "ref_LiFeO2_MP_mp-aaabrcta",
+        "space_group": "Pmmn (59)",
+        "energy_per_fu_eV": -36.20218276977539,
+        "mp_id": "mp-aaabrcta"
+      },
+      "ref_r3m": {
+        "label": "ref_LiFeO2_R3m",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -97.3895492553711
+      },
+      "paper_table_I": {
+        "mo_dist": "2.01x6",
+        "sg": "Pmmn",
+        "mu_m": 4.24,
+        "mu_ap": null,
+        "es_sg": 0.14,
+        "es_r3m": 0.06,
+        "delta_r": 1.18
+      },
+      "notes": [
+        "MP ground-state SG hint: Pmmn (mp-aaabrcta)."
+      ]
+    },
+    {
+      "dopant": "Ni",
+      "mo_distances": [
+        [
+          1.74,
+          1
+        ],
+        [
+          1.79,
+          1
+        ],
+        [
+          1.81,
+          1
+        ]
+      ],
+      "mo_dist_str": "1.74x1, 1.79x1, 1.81x1",
+      "relaxed_sg": "P1",
+      "mu_m": 1.303492546081543,
+      "mu_ap": 2.7070720195770264,
+      "es_sg_eV": -3.090740203857422,
+      "es_r3m_eV": 163.36030197143555,
+      "delta_r": 1.0275229357798166,
+      "e_doped_eV": -1063.8292236328125,
+      "ref_sg": {
+        "label": "ref_LiNiO2_MP_mp-aaafdqij",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -32.61316680908203,
+        "mp_id": "mp-aaafdqij"
+      },
+      "ref_r3m": {
+        "label": "ref_LiNiO2_R3m",
+        "space_group": "P1 (1)",
+        "energy_per_fu_eV": -199.064208984375
+      },
+      "paper_table_I": {
+        "mo_dist": "1.94x4, 2.04x2",
+        "sg": "P2/c",
+        "mu_m": 1.29,
+        "mu_ap": null,
+        "es_sg": 0.06,
+        "es_r3m": -0.01,
+        "delta_r": 1.03
+      },
+      "notes": [
+        "MP ground-state SG hint: P1 (mp-aaafdqij)."
+      ]
+    }
+  ]
+}
